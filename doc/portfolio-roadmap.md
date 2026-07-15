@@ -3,14 +3,14 @@
 ## 진행 상황 (매 작업 후 갱신)
 
 - [x] 로드맵 수립 (2026-07-15)
-- [ ] **Phase 1. 안전망** ← 진행 중
+- [x] **Phase 1. 안전망** (2026-07-16 완료)
   - [x] 레포 이전: 팀 레포 → `binseoyun/song-time` orphan 스냅샷 ([ADR-001](ADR/ADR-001-레포-이전-및-시크릿-정리.md), 2026-07-16)
   - [x] `.env.example` 템플릿 3종 작성 (2026-07-16)
-  - [ ] 키 로테이션 (JWT_SECRET, DB 비밀번호, GEMINI_API_KEY) — 사용자 작업
-  - [ ] `authController.js` JWT secret fallback 제거 (fail-fast)
-  - [ ] 테스트 환경 구축 (app/server 분리 + Jest/supertest + 테스트 DB 결정 ADR)
-  - [ ] 핵심 API 통합 테스트 (auth / courses / timetables)
-- [ ] Phase 2. 동시성 개선
+  - [x] 키 로테이션 (JWT_SECRET, DB 비밀번호, GEMINI_API_KEY) — 사용자 완료 (2026-07-16)
+  - [x] JWT secret fallback 제거 + 필수 환경변수 fail-fast (`src/config/env.js`, 2026-07-16)
+  - [x] 테스트 환경 구축: app/server 분리 + Jest/supertest + Docker MySQL 테스트 DB ([ADR-002](ADR/ADR-002-테스트-DB-전략.md), [리팩토링 01](../doc/refactoring/01-app-server-분리와-테스트-환경.md), 2026-07-16)
+  - [x] 핵심 API 통합 테스트 19개 (auth / courses / timetables) — `npm run test:db:up` 후 `npm test` (2026-07-16)
+- [ ] Phase 2. 동시성 개선 ← 다음 작업
 - [ ] Phase 3. K8s 운영화
 - [ ] Phase 4. CI/CD
 - [ ] Phase 5. 관측성

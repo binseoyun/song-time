@@ -1,0 +1,19 @@
+# 통합 테스트 전용 MySQL. 개발용 DB(루트 compose, 3310)와 분리해 3311에 띄운다.
+# 데이터는 tmpfs(메모리)에만 존재 — 컨테이너 내리면 사라지는 일회용 DB.
+services:
+  test-db:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: test
+      MYSQL_DATABASE: sugang_test
+      MYSQL_USER: test
+      MYSQL_PASSWORD: test
+    ports:
+      - "3311:3306"
+    tmpfs:
+      - /var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-utest", "-ptest"]
+      interval: 2s
+      timeout: 5s
+      retries: 30

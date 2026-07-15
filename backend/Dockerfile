@@ -10,5 +10,5 @@ COPY . .
 ENV NODE_ENV=production
 EXPOSE 8000
 
-CMD ["sh", "-c", "node src/seedData.js && node src/app.js"]
+CMD ["sh", "-c", "node src/seedData.js && node src/server.js"]
 

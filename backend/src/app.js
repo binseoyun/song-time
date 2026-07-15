@@ -1,7 +1,8 @@
-﻿const express = require('express');
+// Express 앱 정의 (라우팅/미들웨어/모델 관계).
+// 서버 기동(리스닝, DB sync)은 server.js가 담당 — supertest가 앱만 import해서 테스트할 수 있게 분리.
+const express = require('express');
 const cors = require('cors');
 const sequelize = require('./config/database');
-require('dotenv').config();
 const User = require('./models/User');
 const Class = require('./models/Class');
 const ClassSchedule = require('./models/ClassSchedule');
@@ -62,19 +63,5 @@ app.use((req, res) => {
   console.log(`[404] Not Found: ${req.url}`);
   res.status(404).json({ message: `페이지를 찾을 수 없습니다: ${req.url}` });
 });
-
-const PORT = 8000;
-
-sequelize
-  .sync({ force : false })
-  .then(() => {
-    console.log('데이터베이스 연결 및 테이블 생성 완료!');
-    app.listen(PORT, () => {
-      console.log(`서버 실행 중! PORT: ${PORT}`);
-    });
-  })
-  .catch((err) => {
-    console.error('DB 연결 실패:', err);
-  });
 
 module.exports = app;

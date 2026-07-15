@@ -1,5 +1,6 @@
 // authMiddleware.js - JWT 토큰을 검증하고 사용자 ID를 req.user에 삽입하는 미들웨어
 const jwt = require('jsonwebtoken');
+const { JWT_SECRET } = require('../config/env');
 
 module.exports = (req, res, next) => {
     // 1. Authorization 헤더에서 토큰을 가져옵니다.
@@ -15,7 +16,7 @@ module.exports = (req, res, next) => {
 
     try {
         // 3. 토큰을 해독하고 유효성 검사 (시크릿 키 사용)
-        decodedToken = jwt.verify(token, process.env.JWT_SECRET);
+        decodedToken = jwt.verify(token, JWT_SECRET);
         
         if (!decodedToken) {
             return res.status(401).json({ message: '토큰이 유효하지 않습니다.' });

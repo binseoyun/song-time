@@ -2,6 +2,7 @@
 const User = require('../models/User');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const { JWT_SECRET } = require('../config/env');
 
 //1. 회원가입 controller
 exports.register = async (req, res) => {
@@ -24,7 +25,7 @@ exports.register = async (req, res) => {
             major
         });
         // 3. 회원가입 성공 시 바로 토큰 발급! 
-        const token = jwt.sign({ id: newUser.id }, process.env.JWT_SECRET || 'secret', { expiresIn: '1h' });
+        const token = jwt.sign({ id: newUser.id }, JWT_SECRET, { expiresIn: '1h' });
         res.status(201).json({
             message: '회원가입이 완료되었습니다.',
             token,
@@ -59,7 +60,7 @@ exports.login = async (req, res) => {
 
            //JWT 생성
            //유저 DB ID인 user.id를 토큰에 담아줌
-          const token = jwt.sign({ id:user.id}, process.env.JWT_SECRET, { expiresIn: '1h'});
+          const token = jwt.sign({ id:user.id}, JWT_SECRET, { expiresIn: '1h'});
               
               res.status(200).json({
                 message: '로그인 성공',

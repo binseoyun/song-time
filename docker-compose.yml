@@ -38,7 +38,7 @@ services:
       DB_HOST: db
       DB_PORT: 3306
       AI_SERVER_URL: http://ai-server:5000
-    command: sh -c "node src/seedData.js && node src/app.js"
+    command: sh -c "node src/seedData.js && node src/server.js"
     depends_on:
       db:
         condition: service_healthy

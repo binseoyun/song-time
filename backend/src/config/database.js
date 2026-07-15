@@ -1,7 +1,7 @@
 //sequelize가 MySQL에 접속할 수 있도록 설정해주는 파일
 
 const { Sequelize } = require('sequelize');
-require('dotenv').config(); // 환경변수(.env) 불러오기
+require('./env'); // 환경변수 로드 + 필수값 검증
 
 // new Sequelize('DB이름', '유저명', '비밀번호', { 옵션 })
 const sequelize = new Sequelize(
