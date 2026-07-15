@@ -1,0 +1,75 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+  namespace: sugang-system
+spec:
+  # 외부 접속(LoadBalancer) 허용 (프론트가 브라우저에서 직접 호출할 경우 필요)
+  # 만약 프론트 컨테이너 내부에서만 호출한다면 ClusterIP여도 됨.
+  # 여기서는 안전하게 LoadBalancer로 둡니다.
+  type: LoadBalancer 
+  ports:
+  - port: 8000
+    targetPort: 8000
+  selector:
+    app: backend
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: sugang-system
+spec:
+  replicas: 2 # 부하 분산을 위해 2개 실행
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+      - name: backend
+        image: krpark1108/backend:v4 # ✅ 수정 완료: Docker Hub 경로 반영
+        imagePullPolicy: Always # ✅ K8s가 Docker Hub에서 이미지를 가져오도록 Always로 변경
+        ports:
+        - containerPort: 8000
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8000
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 2
+
+        env:
+        # DB 연결 정보 (ConfigMap이나 Secret에서 가져오는 방식도 좋지만, 직관적으로 적어둠)
+        - name: DB_HOST
+          value: "db-service" # 10-db.yaml에서 만든 서비스 이름
+        - name: DB_PORT
+          value: "3306"
+        - name: DB_USER
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: db-user
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: db-password
+        - name: DB_NAME
+          value: "cloudsystem_db"
+        # AI 서버 연결 정보 (서비스 이름으로 호출)
+        - name: AI_SERVER_URL
+          value: "http://ai-server-service:5000"
+        # ★★★ [여기 추가] 이게 있어야 로그인이 됩니다! ★★★
+        - name: JWT_SECRET
+          value: "mySuperSecretKey1234!"
+        - name: CRON_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: cron-secret

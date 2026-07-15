@@ -1,0 +1,32 @@
+# 민감 정보
+.env
+.env.docker
+**/backend/.env
+**/backend/ai-server/.env 
+
+# Node.js 의존성 및 빌드
+**/node_modules
+/dist
+/build
+npm-debug.log*
+
+# Python 의존성 및 캐시
+**/__pycache__
+**/*.pyc
+/venv
+*.log
+
+# IDE 및 OS 임시 파일
+.vscode/
+.DS_Store
+
+K8s/02-secret.yaml
+# 개인 메모/산출물 (커밋 제외)
+Untitled
+*.pdf
+
+# 기존 팀 레포 git 백업
+.git-backup-team-repo/
+node_modules
+node_modules
+node_modules

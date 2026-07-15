@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: sugang-system
+data:
+  # ───── DB 설정 ─────
+  DB_HOST: "db-service"
+  DB_NAME: "cloudsystem_db"
+
+  # ───── AI 추천 설정 ─────
+  GENAI_MODEL: "models/gemini-pro-latest"
+  RECOMMEND_TOP_K: "5"
+
+  # ───── 직무별 추천 기본 과목 리스트 (실제 코드 기반) ─────
+  # 1) 백엔드 개발: 자바, 웹프로그래밍, 네트워크, 리눅스, 클라우드 등
+  JOB_BACKEND_COURSES: "21000557-1,21000557-2,21000557-3,21105365-1,21105365-2,21003186-1,21003186-2,21001713-1,21001713-2,21003735-1"
+
+  # 2) 데이터 분석: 데이터마이닝, 파이썬데이터분석, AI수학, 딥러닝 등
+  JOB_DATA_COURSES: "21105367-1,21102905-1,21105625-1,21105229-1,21105586-1,21102990-1"
+
+  # 3) 프로젝트 매니저: 소프트웨어공학, 캡스톤/프로젝트/융합/모바일/센서 관련 과목
+  JOB_PM_COURSES: "21000555-1,21003682-1,21102993-1,21102993-2,21102983-1,21102983-2,21003076-1,21102529-1,21100722-1,21105365-1,21105365-2"
+
+  FRONTEND_VITE_API_BASE_URL: "http://backend-service:8000"
+  FRONTEND_VITE_AUTH_BASE_URL: "http://backend-service:8000/api/auth"
+  FRONTEND_VITE_AI_BASE_URL: "http://backend-service:8000/api/ai/recommend"
+  FRONTEND_VITE_SCHEDULER_BASE_URL: "http://ai-server-service:5000/api/schedule"

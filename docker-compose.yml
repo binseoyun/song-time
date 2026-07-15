@@ -1,0 +1,77 @@
+version: "3.9"
+
+services:
+  db:
+  # ★ [수정 1] 공식 이미지 대신 Dockerfile로 빌드
+    build:
+      context: ./database
+      dockerfile: Dockerfile
+    image: my-database:v1  # ★ [수정 2] K8s와 똑같은 이름표 붙이기
+    #image: mysql:8.0
+    restart: unless-stopped
+    env_file:
+      - .env.docker
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    ports:
+      - "3310:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./database/conf.d/my.cnf:/etc/mysql/conf.d/my.cnf:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file:
+      - .env.docker
+    environment:
+      DB_HOST: db
+      DB_PORT: 3306
+      AI_SERVER_URL: http://ai-server:5000
+    command: sh -c "node src/seedData.js && node src/app.js"
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  ai-server:
+    build:
+      context: ./backend/ai-server
+      dockerfile: Dockerfile
+    env_file:
+      - .env.docker
+    environment:
+      COURSE_API_URL: ${COURSE_API_URL:-http://backend:8000/api/courses}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GENAI_MODEL: ${GENAI_MODEL:-models/gemini-pro-latest}
+    depends_on:
+      - backend
+    ports:
+      - "5000:5000"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend/Course Registration Platform
+      dockerfile: Dockerfile
+    depends_on:
+      - backend
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+
+volumes:
+  db_data:
+

@@ -1,0 +1,126 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: interest-checker
+  namespace: sugang-system
+spec:
+  schedule: "* * * * *"
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: interest-logger
+              image: python:3.11-alpine
+              env:
+                - name: BACKEND_BASE_URL
+                  value: "http://backend-service:8000"
+                - name: CRON_STUDENT_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: app-secrets
+                      key: cron-student-id
+                - name: CRON_STUDENT_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: app-secrets
+                      key: cron-student-password
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -euo pipefail
+                  python - <<'PY'
+                  import datetime
+                  import json
+                  import os
+                  import sys
+                  import urllib.error
+                  import urllib.request
+
+
+                  def log(message: str) -> None:
+                      now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                      print(f"[{now}] {message}", flush=True)
+
+
+                  base_url = os.getenv("BACKEND_BASE_URL", "http://backend-service:8000").rstrip("/")
+                  student_id = os.getenv("CRON_STUDENT_ID")
+                  password = os.getenv("CRON_STUDENT_PASSWORD")
+
+                  if not student_id or not password:
+                      log("CRON_STUDENT_ID 또는 CRON_STUDENT_PASSWORD가 비어 있습니다.")
+                      sys.exit(1)
+
+
+                  def request_json(url: str, data=None, headers=None, timeout=15):
+                      req = urllib.request.Request(url, data=data, headers=headers or {})
+                      with urllib.request.urlopen(req, timeout=timeout) as resp:
+                          return json.loads(resp.read().decode("utf-8"))
+
+
+                  # 1. 로그인 후 토큰 발급
+                  try:
+                      login_payload = json.dumps(
+                          {"studentId": student_id, "password": password}
+                      ).encode("utf-8")
+                      login_response = request_json(
+                          f"{base_url}/api/auth/login",
+                          data=login_payload,
+                          headers={"Content-Type": "application/json"},
+                          timeout=10,
+                      )
+                  except urllib.error.HTTPError as err:
+                      log(f"로그인 실패: {err.status} {err.reason}")
+                      log(err.read().decode("utf-8"))
+                      sys.exit(1)
+                  except Exception as exc:
+                      log(f"로그인 요청 오류: {exc}")
+                      sys.exit(1)
+
+                  token = login_response.get("token")
+                  if not token:
+                      log("토큰을 받지 못했습니다.")
+                      sys.exit(1)
+
+                  # 2. 관심 과목 목록 조회
+                  try:
+                      interests_response = request_json(
+                          f"{base_url}/api/courses/interests",
+                          headers={"Authorization": f"Bearer {token}"},
+                          timeout=10,
+                      )
+                  except urllib.error.HTTPError as err:
+                      log(f"관심 과목 조회 실패: {err.status} {err.reason}")
+                      log(err.read().decode("utf-8"))
+                      sys.exit(1)
+                  except Exception as exc:
+                      log(f"관심 과목 조회 오류: {exc}")
+                      sys.exit(1)
+
+                  interest_ids = {str(cid) for cid in interests_response.get("courses", [])}
+                  if not interest_ids:
+                      log("등록된 관심 과목이 없습니다.")
+                      sys.exit(0)
+
+                  # 3. 관심 과목 상세 정보와 수요 로그 출력
+                  try:
+                      all_courses = request_json(f"{base_url}/api/courses", timeout=20)
+                  except Exception as exc:
+                      log(f"전체 과목 조회 실패: {exc}")
+                      sys.exit(1)
+
+                  matched_courses = [
+                      course for course in all_courses if str(course.get("id")) in interest_ids
+                  ]
+
+                  log(f"관심 과목 {len(matched_courses)}건")
+                  for course in matched_courses:
+                      name = course.get("name", "미정")
+                      code = course.get("code", course.get("id", "N/A"))
+                      enrolled = course.get("enrolled", 0)
+                      capacity = course.get("capacity", 0)
+                      log(f"- {name} ({code}) : {enrolled}/{capacity}명")
+                  PY

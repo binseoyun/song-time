@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+ortools
+pydantic
+sqlalchemy
+mysql-connector-python
+requests
+google-generativeai==0.8.5
+python-dotenv

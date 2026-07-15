@@ -1,0 +1,144 @@
+# 프로젝트 고도화 & 포트폴리오 로드맵
+
+## 진행 상황 (매 작업 후 갱신)
+
+- [x] 로드맵 수립 (2026-07-15)
+- [ ] **Phase 1. 안전망** ← 진행 중
+  - [x] 레포 이전: 팀 레포 → `binseoyun/song-time` orphan 스냅샷 ([ADR-001](ADR/ADR-001-레포-이전-및-시크릿-정리.md), 2026-07-16)
+  - [x] `.env.example` 템플릿 3종 작성 (2026-07-16)
+  - [ ] 키 로테이션 (JWT_SECRET, DB 비밀번호, GEMINI_API_KEY) — 사용자 작업
+  - [ ] `authController.js` JWT secret fallback 제거 (fail-fast)
+  - [ ] 테스트 환경 구축 (app/server 분리 + Jest/supertest + 테스트 DB 결정 ADR)
+  - [ ] 핵심 API 통합 테스트 (auth / courses / timetables)
+- [ ] Phase 2. 동시성 개선
+- [ ] Phase 3. K8s 운영화
+- [ ] Phase 4. CI/CD
+- [ ] Phase 5. 관측성
+
+> 작성일: 2026-07-15
+> 목적: PRD.md의 목표(구조 파악 → 리팩토링/아키텍처 보완 → 포트폴리오 정리)를 실행 가능한 단계로 구체화한다.
+> 원칙: **"무엇을 만들었다"가 아니라 "왜 그렇게 결정했고, 무엇이 문제였고, 어떻게 측정하며 개선했는가"** 를 남긴다.
+
+---
+
+## 0. 현재 상태 진단 (As-Is)
+
+### 아키텍처
+```
+[React/Vite Frontend] ──> [Express Backend :8000] ──> [MySQL (StatefulSet+PVC)]
+        │                        │
+        └──────────────> [FastAPI AI Server :5000] ──> Gemini API
+                                 (시간표 생성 알고리즘 + AI 추천)
+
+K8s: namespace / ConfigMap / Secret / backend 2 replicas / CronJob(관심과목 체커, 매분)
+```
+
+### 발견된 문제점 목록 (각각이 포트폴리오 소재)
+
+| # | 문제 | 위치 | 심각도 |
+|---|------|------|--------|
+| P1 | `enrolled` 카운터가 비정규화되어 있고, 동시 요청 시 정합성 검증이 안 됨. 정원 초과 방지 로직 자체가 없음 | `courseController.js` toggleInterest | 높음 |
+| P2 | 테스트 코드 0개 (`"test": "exit 1"`) — 리팩토링의 안전망 부재 | backend/package.json | 높음 |
+| P3 | CI/CD 없음 — 이미지 수동 빌드/푸시, 태그가 `v3`, `v4` 수동 관리 | K8s/*.yaml 주석 참고 | 높음 |
+| P4 | JWT secret fallback이 `'secret'` 하드코딩, 회원가입/로그인의 secret 처리 불일치 | authController.js:27,62 | 높음 |
+| P5 | 서비스마다 LoadBalancer 노출, Ingress 없음. CORS origin도 `127.0.0.1:3000` 하드코딩 | K8s/30-backend.yaml, app.js:32 | 중간 |
+| P6 | `sequelize.sync()` 기반 스키마 관리 — 마이그레이션 이력 없음, 운영 DB에 위험 | app.js:69 | 중간 |
+| P7 | 관측성 제로: console.log 로깅, 메트릭/트레이싱 없음, liveness가 `/` 200만 확인 (readiness 없음) | app.js, K8s | 중간 |
+| P8 | AI 서버가 상태를 안 가짐에도 프론트가 **전체 과목 목록을 요청 바디에 실어** 보냄 — 데이터 소유권/경계 설계 문제 | ai-server/main.py ScheduleRequest | 중간 |
+| P9 | CronJob이 매분 로그인 → 토큰 발급 반복, 서비스 계정 개념 없음 | K8s/50-cronjob-checker.yaml | 낮음 |
+| P10 | 매 기동 시 `seedData.js` 실행, 시드와 앱 라이프사이클 미분리 | docker-compose.yml command | 낮음 |
+| P11 | `.env` 파일·`__pycache__` 등이 저장소에 존재 — 시크릿 위생 문제 | backend/.env 등 | 중간 |
+| P12 | resource requests/limits, HPA 없음 — "부하 분산 위해 replicas 2"라고 주석만 있고 근거 없음 | K8s/30-backend.yaml | 중간 |
+
+---
+
+## 1. 고도화 전략: 3개의 포트폴리오 서사(Narrative)
+
+기능 나열 대신, **문제 정의 → 가설 → 실험/측정 → 개선 → 정량 결과**로 완결되는 스토리 3개를 만든다.
+각 서사가 백엔드/인프라/DevOps 역량을 하나씩 커버한다.
+
+### 서사 A. "수강신청 트래픽 폭주를 견디는 백엔드" (백엔드 역량)
+
+수강신청 도메인의 본질적 난제 = **순간 동시성**. 이걸 정면으로 다루는 것이 이 프로젝트의 최고 차별점.
+
+1. **문제 정의**: 정원 30명 과목에 동시 300명이 신청하면? 현재 코드는 정원 검사 자체가 없고, `enrolled`는 카운트 캐시라 CourseInterest 실제 행 수와 어긋날 수 있다.
+2. **측정(Before)**: k6/Artillery로 동시 신청 부하 테스트 → 정원 초과 발생 건수, p95 latency, 에러율 기록. **"깨지는 걸 먼저 증명"** 하는 게 핵심.
+3. **개선 실험 (비교 자체가 포트폴리오)**:
+   - 1안: 조건부 원자 UPDATE (`UPDATE ... SET enrolled=enrolled+1 WHERE enrolled < capacity`)
+   - 2안: 비관적 락 (`SELECT ... FOR UPDATE`) — 현재 코드의 lock 사용이 실제로 유효한지 검증 포함
+   - 3안: Redis 원자 연산(INCR/Lua) + 비동기 DB 반영
+   - 각 안의 처리량/정합성/복잡도 트레이드오프를 표로 비교하고 **왜 최종안을 선택했는지** ADR로 기록
+4. **측정(After)**: 동일 시나리오 재실행 → 정원 초과 0건, 처리량/지연시간 변화 정량 기록
+5. **파생 소재**: 데드락 발생 시 트러블슈팅(MySQL `SHOW ENGINE INNODB STATUS`), 커넥션 풀 사이징
+
+### 서사 B. "장난감 K8s를 운영 가능한 클러스터로" (인프라/클라우드 역량)
+
+1. **문제 정의**: 현재 K8s는 "떠 있기만 한" 상태 — 진입점이 서비스별 LoadBalancer로 분산, 프로브 부실, 리소스 한도 없음, 스케일 근거 없음.
+2. **개선 항목** (각각 ADR 1건):
+   - **Ingress(NGINX) 도입**: 단일 진입점 + path 라우팅(`/api`→backend, `/ai`→ai-server, `/`→frontend). LoadBalancer 3개 → 1개로 줄인 이유(비용/보안/CORS 단순화)를 문서화
+   - **Probe 재설계**: liveness(`/` 생존)와 readiness(`/health` DB 연결)를 분리. "liveness에 DB 체크를 넣으면 DB 장애 시 전체 파드 재시작 폭풍이 온다"는 함정을 서사로
+   - **resource requests/limits + HPA**: 부하 테스트로 파드당 처리량을 실측 → 그 근거로 requests 산정 → HPA 임계값 설정. "replicas: 2 (주석: 부하 분산)"에서 "실측 기반 오토스케일링"으로
+   - **Secret 관리 개선**: git에 있던 .env 정리, git 히스토리 세탁(BFG), Sealed Secrets 또는 External Secrets 검토
+   - **DB 운영성**: 마이그레이션 도구(sequelize-cli 또는 umzug) 도입, `sync()` 제거. StatefulSet 백업 전략(CronJob mysqldump) 추가
+3. **측정**: 장애 주입 실험 — DB 파드 kill 시 복구 시간, backend 파드 kill 시 무중단 여부(rolling update + readiness gate), HPA 반응 시간
+
+### 서사 C. "수동 배포에서 자동화된 파이프라인으로" (DevOps 역량)
+
+1. **문제 정의**: 현재 배포 = 로컬 빌드 → Docker Hub 수동 push → yaml 이미지 태그 수동 수정(`v3`, `v4`) → kubectl apply. 사람이 태그를 틀리면 끝.
+2. **개선**:
+   - **테스트 기반 구축**: Jest + supertest로 핵심 API 통합 테스트(동시성 테스트 포함 — 서사 A와 연결)
+   - **GitHub Actions CI**: lint → test → docker build → 커밋 SHA 태깅 → push
+   - **CD**: 1단계는 Actions에서 kustomize edit + apply, 2단계(선택)는 ArgoCD GitOps. 로컬 kind 클러스터 한계 때문에 어디까지 했고 실환경이라면 어떻게 할지를 문서로
+3. **측정**: 배포 소요 시간(수동 N분 → 자동 M분), 배포 실수 가능 지점 수 감소
+
+### (선택) 서사 D. "AI 서버 경계 재설계" — 시간이 남으면
+
+- 프론트가 전체 과목 데이터를 AI 서버에 실어 보내는 현재 구조의 문제(payload 비대, 데이터 위변조 가능, 프론트-DB 스키마 결합)를 정의하고, AI 서버가 backend API에서 직접 조회(또는 read-only DB 접근)하도록 변경.
+- Gemini API 호출 캐싱/타임아웃/폴백 처리 — 외부 의존성 장애 격리 서사.
+
+---
+
+## 2. 실행 순서 (의존관계 기준)
+
+```
+Phase 1. 안전망         : 테스트 환경 구축 + 핵심 API 통합 테스트 + .env/시크릿 위생   (서사 C 앞부분)
+Phase 2. 동시성 개선     : 부하테스트(Before) → 개선 실험 → 측정(After)              (서사 A 전체)
+Phase 3. K8s 운영화     : Ingress → Probe → resources/HPA → 마이그레이션            (서사 B 전체)
+Phase 4. CI/CD          : GitHub Actions → (선택) GitOps                            (서사 C 뒷부분)
+Phase 5. 관측성         : 구조화 로깅 → Prometheus/Grafana → 부하테스트 대시보드      (서사 A,B의 측정 강화)
+```
+
+Phase 1을 먼저 하는 이유: 이후 모든 리팩토링의 "깨지지 않았음"을 증명할 수단이 필요하고, 시크릿이 git에 있는 상태로 CI를 붙이면 유출 위험이 커지기 때문.
+
+---
+
+## 3. 문서화 체계 (CLAUDE.md 규칙 반영)
+
+```
+doc/
+├── ADR/                          # 의사결정 기록 (결정 1건 = 파일 1개)
+│   ├── ADR-001-동시성-제어-방식-선택.md
+│   ├── ADR-002-ingress-도입.md
+│   ├── ADR-003-probe-전략.md
+│   └── ...
+├── troubleshooting/              # 문제 발생 → 원인 분석 → 해결 과정 (시간순 기록)
+├── refactoring/                  # 리팩토링 단위별 Before/After와 근거
+├── experiment/                   # 부하테스트 시나리오, 원본 결과 데이터, 그래프
+└── portfolio/                    # 위 문서들을 서사 A/B/C로 재구성한 최종본
+```
+
+ADR 템플릿: **상황(Context) / 검토한 대안들과 각각의 트레이드오프 / 결정과 이유 / 결과(정량·정성)**
+
+### 포트폴리오 글쓰기 원칙
+- 기술 이름은 결론이 아니라 **선택의 결과**로만 등장시킨다. ("Redis를 썼다" ✕ → "락 경합으로 p95가 N초까지 튀어서, 정합성 요구 수준과 비교한 끝에 ~를 선택했다" ○)
+- 모든 개선은 **숫자 2개(Before/After)** 를 갖는다. 숫자를 못 만들면 그 개선은 서사에서 뺀다.
+- 실패한 시도도 기록한다. (예: 비관적 락으로 먼저 시도 → 데드락 → 방향 전환) — 트러블슈팅 서사는 실패에서 나온다.
+- 각 서사의 끝에 "실제 운영 환경이라면 추가로 무엇을 했을지"(한계 인식)를 한 단락 쓴다.
+
+---
+
+## 4. 리스크 & 스코프 관리
+
+- **하지 말 것**: 새 기능 추가(기능은 이미 충분함), MSA 전환 같은 대수술, 프론트엔드 대개편. 포트폴리오 심사자는 완성도보다 **사고 과정의 깊이**를 본다.
+- **kind 로컬 클러스터의 한계**(LoadBalancer, 스토리지)는 숨기지 말고 "클라우드 환경이라면 이렇게 매핑된다"로 정면 돌파.
+- Gemini API 키 등 시크릿은 어떤 문서/커밋에도 남기지 않는다.

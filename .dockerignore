@@ -1,0 +1,45 @@
+#.git
+#.gitignore
+#node_modules
+#dist
+#database/
+#backend/
+#frontend/
+#docker-compose.yml
+#.env
+
+
+# ---------------------
+# 민감 정보 및 설정 파일
+# ---------------------
+.env
+.env.docker
+**/.*.env*
+
+# ---------------------
+# Git 및 IDE 파일
+# ---------------------
+.git
+.gitignore
+.vscode
+.DS_Store
+
+# ---------------------
+# 의존성 및 캐시
+# ---------------------
+**/node_modules
+**/__pycache__
+**/npm-debug.log*
+
+# ---------------------
+# 빌드 결과물 (Docker가 새로 빌드)
+# ---------------------
+**/dist
+**/build
+*.log
+
+# ---------------------
+# 배포 환경 파일 (이미지에 포함 불필요)
+# ---------------------
+k8s/
+docker-compose.yml
