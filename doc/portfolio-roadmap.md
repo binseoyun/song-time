@@ -10,6 +10,8 @@
   - [x] JWT secret fallback 제거 + 필수 환경변수 fail-fast (`src/config/env.js`, 2026-07-16)
   - [x] 테스트 환경 구축: app/server 분리 + Jest/supertest + Docker MySQL 테스트 DB ([ADR-002](ADR/ADR-002-테스트-DB-전략.md), [리팩토링 01](../doc/refactoring/01-app-server-분리와-테스트-환경.md), 2026-07-16)
   - [x] 핵심 API 통합 테스트 19개 (auth / courses / timetables) — `npm run test:db:up` 후 `npm test` (2026-07-16)
+  - [x] 로컬 `docker compose` 실행 환경 복구: 팀플 시절부터 반복되던 db 초기화 crash-loop의 근본 원인(환경변수 치환 버그) 규명 및 수정, Windows Docker Desktop 포트 잔류 우회 ([트러블슈팅 01](troubleshooting/01-docker-compose-환경변수-치환-버그와-포트-잔류.md), 2026-07-22)
+  - [x] Docker Hub 이미지 이관(`krpark1108` → `binseoyun`) 및 kind 클러스터 배포 검증(Phase 3 착수 전 사전 점검): `app-secrets`의 `cron-secret` 키 누락으로 backend가 못 뜨던 문제, frontend 이미지가 Vite 빌드 시점에 docker-compose용 주소를 번들에 구워 K8s에서 API 호출이 조용히 깨지던 문제 발견 및 수정 ([트러블슈팅 02](troubleshooting/02-kind-배포-명령어-레퍼런스.md), [K8s 아키텍처 다이어그램](architecture/k8s-architecture.html), 2026-07-22)
 - [ ] Phase 2. 동시성 개선 ← 다음 작업
 - [ ] Phase 3. K8s 운영화
 - [ ] Phase 4. CI/CD

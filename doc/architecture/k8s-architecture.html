@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>K8s Architecture - Course Registration Platform</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', sans-serif; background: #0f1117; color: #e0e0e0; padding: 32px; }
+  h1 { text-align: center; font-size: 22px; color: #7dd3fc; margin-bottom: 8px; letter-spacing: 1px; }
+  .subtitle { text-align: center; font-size: 13px; color: #64748b; margin-bottom: 32px; }
+
+  .diagram { display: flex; flex-direction: column; gap: 24px; max-width: 1100px; margin: 0 auto; }
+
+  /* Namespace box */
+  .namespace {
+    border: 2px dashed #3b82f6;
+    border-radius: 16px;
+    padding: 24px;
+    position: relative;
+    background: rgba(59, 130, 246, 0.04);
+  }
+  .namespace-label {
+    position: absolute;
+    top: -14px;
+    left: 20px;
+    background: #0f1117;
+    padding: 0 10px;
+    color: #3b82f6;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  /* Row layouts */
+  .row { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+  .row-center { display: flex; gap: 16px; align-items: center; justify-content: center; flex-wrap: wrap; }
+
+  /* Cards */
+  .card {
+    border-radius: 10px;
+    padding: 14px 16px;
+    font-size: 12px;
+    flex: 1;
+    min-width: 160px;
+    position: relative;
+  }
+  .card .kind {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+    opacity: 0.7;
+  }
+  .card .name { font-size: 14px; font-weight: 700; margin-bottom: 6px; }
+  .card .detail { font-size: 11px; opacity: 0.75; line-height: 1.6; }
+  .card .badge {
+    display: inline-block;
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    margin-top: 4px;
+    font-weight: 600;
+  }
+
+  /* Colors per type */
+  .deploy { background: #1e293b; border: 1px solid #3b82f6; }
+  .deploy .kind { color: #3b82f6; }
+  .deploy .name { color: #93c5fd; }
+
+  .service { background: #1a2e1a; border: 1px solid #22c55e; }
+  .service .kind { color: #22c55e; }
+  .service .name { color: #86efac; }
+
+  .statefulset { background: #2d1f00; border: 1px solid #f59e0b; }
+  .statefulset .kind { color: #f59e0b; }
+  .statefulset .name { color: #fcd34d; }
+
+  .cronjob { background: #1e1b2e; border: 1px solid #a78bfa; }
+  .cronjob .kind { color: #a78bfa; }
+  .cronjob .name { color: #c4b5fd; }
+
+  .configmap { background: #1a1e2e; border: 1px solid #60a5fa; }
+  .configmap .kind { color: #60a5fa; }
+  .configmap .name { color: #93c5fd; }
+
+  .secret { background: #2d1a1a; border: 1px solid #f87171; }
+  .secret .kind { color: #f87171; }
+  .secret .name { color: #fca5a5; }
+
+  .pvc { background: #1a2d2d; border: 1px solid #2dd4bf; }
+  .pvc .kind { color: #2dd4bf; }
+  .pvc .name { color: #5eead4; }
+
+  .external { background: #1e1e1e; border: 1px solid #6b7280; border-style: dashed; }
+  .external .kind { color: #9ca3af; }
+  .external .name { color: #d1d5db; }
+
+  /* Arrows */
+  .arrow-section {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    color: #4b5563;
+    font-size: 11px;
+    padding: 4px 0;
+  }
+  .arrow { color: #6b7280; font-size: 18px; }
+
+  /* Section headers */
+  .section-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: #475569;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid #1e293b;
+  }
+
+  /* Replica badge */
+  .replica { background: #1e3a5f; color: #7dd3fc; border: 1px solid #1d4ed8; }
+
+  /* Internet cloud */
+  .cloud {
+    text-align: center;
+    padding: 12px 24px;
+    border-radius: 50px;
+    background: #1a1a2e;
+    border: 1px dashed #4b5563;
+    color: #9ca3af;
+    font-size: 12px;
+  }
+
+  /* Legend */
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 24px;
+    padding: 16px;
+    background: #1a1a1a;
+    border-radius: 10px;
+    border: 1px solid #1e293b;
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #9ca3af; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+  /* Port tag */
+  .port { font-family: monospace; font-size: 10px; background: #0f2233; color: #7dd3fc; border-radius: 3px; padding: 1px 5px; }
+
+  /* Column divider */
+  .col { flex: 1; min-width: 160px; }
+  .col-label { font-size: 10px; color: #475569; text-align: center; margin-bottom: 8px; font-weight: 600; letter-spacing: 0.5px; }
+</style>
+</head>
+<body>
+<h1>☸️ Kubernetes Architecture</h1>
+<p class="subtitle">Course Registration Platform · namespace: sugang-system · 현재(Before Refactoring)</p>
+
+<div class="diagram">
+
+  <!-- External Zone -->
+  <div>
+    <div class="section-title">🌐 External / Internet</div>
+    <div class="row-center">
+      <div class="card external" style="flex:none; min-width:180px; text-align:center;">
+        <div class="kind">User / Browser</div>
+        <div class="name">👤 사용자</div>
+        <div class="detail">Frontend 접속<br><span class="port">:3000</span></div>
+      </div>
+      <div class="card external" style="flex:none; min-width:180px; text-align:center;">
+        <div class="kind">Docker Hub</div>
+        <div class="name">🐳 Image Registry</div>
+        <div class="detail">binseoyun/frontend:v2<br>binseoyun/backend:v1<br>binseoyun/ai-server:v1<br>binseoyun/db:v1</div>
+      </div>
+      <div class="card external" style="flex:none; min-width:180px; text-align:center;">
+        <div class="kind">Google AI</div>
+        <div class="name">🤖 Gemini API</div>
+        <div class="detail">AI 강의 추천<br>models/gemini-pro-latest</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Namespace -->
+  <div class="namespace">
+    <div class="namespace-label">📦 Namespace: sugang-system</div>
+
+    <!-- Config & Secrets row -->
+    <div class="section-title" style="margin-top:8px;">⚙️ Configuration</div>
+    <div class="row" style="margin-bottom: 20px;">
+      <div class="card configmap">
+        <div class="kind">ConfigMap</div>
+        <div class="name">app-config</div>
+        <div class="detail">
+          FRONTEND_VITE_API_BASE_URL<br>
+          FRONTEND_VITE_AUTH_BASE_URL<br>
+          FRONTEND_VITE_AI_BASE_URL<br>
+          FRONTEND_VITE_SCHEDULER_BASE_URL
+        </div>
+      </div>
+      <div class="card secret">
+        <div class="kind">Secret</div>
+        <div class="name">app-secrets</div>
+        <div class="detail">
+          db-password · db-user<br>
+          gemini-api-key<br>
+          cron-secret<br>
+          cron-student-id · cron-student-password
+        </div>
+      </div>
+    </div>
+
+    <!-- Services row -->
+    <div class="section-title">🔌 Services</div>
+    <div class="row" style="margin-bottom: 20px;">
+      <div class="card service">
+        <div class="kind">Service · LoadBalancer</div>
+        <div class="name">frontend-service</div>
+        <div class="detail"><span class="port">:3000</span> → <span class="port">:3000</span><br>nodePort: 32565</div>
+      </div>
+      <div class="card service">
+        <div class="kind">Service · LoadBalancer</div>
+        <div class="name">backend-service</div>
+        <div class="detail"><span class="port">:8000</span> → <span class="port">:8000</span><br>외부 접근 허용</div>
+      </div>
+      <div class="card service">
+        <div class="kind">Service · ClusterIP</div>
+        <div class="name">ai-server-service</div>
+        <div class="detail"><span class="port">:5000</span> → <span class="port">:5000</span><br>클러스터 내부 전용</div>
+      </div>
+      <div class="card service">
+        <div class="kind">Service · ClusterIP</div>
+        <div class="name">db-service</div>
+        <div class="detail"><span class="port">:3306</span><br>클러스터 내부 전용</div>
+      </div>
+    </div>
+
+    <!-- Workloads row -->
+    <div class="section-title">🚀 Workloads</div>
+    <div class="row" style="margin-bottom: 20px; align-items: stretch;">
+
+      <div class="col">
+        <div class="col-label">FRONTEND</div>
+        <div class="card deploy">
+          <div class="kind">Deployment</div>
+          <div class="name">frontend</div>
+          <div class="detail">
+            React + Vite (TypeScript)<br>
+            image: binseoyun/frontend:v2<br>
+            <span class="badge replica">replicas: 1</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="col-label">BACKEND</div>
+        <div class="card deploy">
+          <div class="kind">Deployment</div>
+          <div class="name">backend</div>
+          <div class="detail">
+            Node.js / Express<br>
+            image: binseoyun/backend:v1<br>
+            livenessProbe: GET /<br>
+            <span class="badge replica">replicas: 2</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="col-label">AI SERVER</div>
+        <div class="card deploy">
+          <div class="kind">Deployment</div>
+          <div class="name">ai-server</div>
+          <div class="detail">
+            Python / FastAPI<br>
+            image: binseoyun/ai-server:v1<br>
+            cpu: 500m–2000m<br>
+            memory: 1Gi–2Gi<br>
+            <span class="badge replica">replicas: 1</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="col-label">DATABASE</div>
+        <div class="card statefulset">
+          <div class="kind">StatefulSet</div>
+          <div class="name">db</div>
+          <div class="detail">
+            MySQL 8.0<br>
+            image: binseoyun/db:v1<br>
+            DB: cloudsystem_db<br>
+            <span class="badge replica">replicas: 1</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- PVC -->
+    <div class="row" style="margin-bottom: 20px;">
+      <div style="flex:3"></div>
+      <div style="flex:3"></div>
+      <div style="flex:3"></div>
+      <div class="col" style="flex:3;">
+        <div class="card pvc">
+          <div class="kind">PersistentVolumeClaim</div>
+          <div class="name">db-persistent-storage</div>
+          <div class="detail">accessMode: ReadWriteOnce<br>storage: 1Gi<br>mountPath: /var/lib/mysql</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CronJob -->
+    <div class="section-title">⏰ Scheduled Jobs</div>
+    <div class="row">
+      <div class="card cronjob" style="max-width: 340px;">
+        <div class="kind">CronJob</div>
+        <div class="name">interest-checker</div>
+        <div class="detail">
+          schedule: <span class="port">*/1 * * * *</span> (매 1분)<br>
+          image: python:3.11-alpine<br>
+          restartPolicy: OnFailure<br>
+          successfulJobsHistoryLimit: 1<br>
+          failedJobsHistoryLimit: 3<br><br>
+          1. POST /api/auth/login → 토큰 발급<br>
+          2. GET /api/courses/interests → 관심 과목 조회<br>
+          3. GET /api/courses → 수강 현황 로그 출력
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /namespace -->
+
+  <!-- Legend -->
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#3b82f6;"></div> Deployment</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#22c55e;"></div> Service</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#f59e0b;"></div> StatefulSet</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#a78bfa;"></div> CronJob</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#60a5fa;"></div> ConfigMap</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#f87171;"></div> Secret</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#2dd4bf;"></div> PVC</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#6b7280;"></div> External</div>
+  </div>
+
+</div>
+</body>
+</html>

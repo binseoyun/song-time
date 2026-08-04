@@ -27,7 +27,7 @@ spec:
     spec:
       containers:
       - name: mysql
-        image: krpark1108/db:v3 # ✅ 수정 완료: Docker Hub 경로 반영
+        image: binseoyun/db:v1
         imagePullPolicy: Always # ✅ K8s가 Docker Hub에서 이미지를 가져오도록 Always로 변경
         env:
         - name: MYSQL_ROOT_PASSWORD
