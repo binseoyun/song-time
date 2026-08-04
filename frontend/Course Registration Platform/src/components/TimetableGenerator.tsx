@@ -172,7 +172,8 @@ export function TimetableGenerator({ courses, onSave, isSaving = false }: Timeta
             setIsGenerating(false);
             return;
         }
-        const SCHEDULER_BASE_URL = import.meta.env.VITE_SCHEDULER_BASE_URL ?? 'http://127.0.0.1:5000/api/schedule';
+        // ADR-003: 상대경로 — Ingress/nginx가 같은 origin에서 ai-server로 라우팅해준다.
+        const SCHEDULER_BASE_URL = '/api/schedule';
         // ✅ 2. AI 서버로 요청
         try {
             const response = await fetch(`${SCHEDULER_BASE_URL}`, { 

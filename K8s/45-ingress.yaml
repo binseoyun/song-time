@@ -1,0 +1,36 @@
+# ADR-003: 단일 진입점. frontend는 상대경로(/api/...)로 호출하고,
+# 이 Ingress가 경로 기준으로 실제 서비스로 나눠 보낸다.
+# /api/schedule 은 backend를 거치지 않고 ai-server로 직접 가는 경로라 더 구체적으로 먼저 매칭시킨다.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: app-ingress
+  namespace: sugang-system
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+spec:
+  ingressClassName: nginx
+  rules:
+  - http:
+      paths:
+      - path: /api/schedule
+        pathType: Prefix
+        backend:
+          service:
+            name: ai-server-service
+            port:
+              number: 5000
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: backend-service
+            port:
+              number: 8000
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend-service
+            port:
+              number: 3000

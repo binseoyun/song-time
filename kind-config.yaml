@@ -2,10 +2,17 @@ kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 nodes:
   - role: control-plane
+    kubeadmConfigPatches:
+      - |
+        kind: InitConfiguration
+        nodeRegistration:
+          kubeletExtraArgs:
+            node-labels: "ingress-ready=true"
     extraPortMappings:
-      - containerPort: 30000
-        hostPort: 3100
-      - containerPort: 30080
-        hostPort: 8100
+      # ADR-003: Ingress(NGINX)의 진입점. 80/443 대신 다른 로컬 서비스와 안 겹치는
+      # 포트를 호스트에 매핑해서 http://127.0.0.1:18080 으로 접근한다.
+      - containerPort: 80
+        hostPort: 18080
+        protocol: TCP
   - role: worker
   - role: worker

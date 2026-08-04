@@ -6,9 +6,8 @@ type LoginPageProps = {
   onLogin: (user: User, token: string) => Promise<void> | void;
 };
 
-// 백엔드 API 주소 (Docker 환경: 8000번 포트)
-// 로컬 환경에 맞춰 주소를 수정해주세요 (예: http://localhost:3000/api/auth)
-const API_BASE_URL = import.meta.env.VITE_AUTH_BASE_URL ?? 'http://127.0.0.1:8000/api/auth'
+// ADR-003: 상대경로 — Ingress/nginx가 같은 origin에서 backend로 라우팅해준다.
+const API_BASE_URL = '/api/auth';
 
 export function LoginPage({ onLogin }: LoginPageProps) {
   

@@ -38,8 +38,8 @@ const jobFields: JobField[] = [
   },
 ];
 
-//백엔드 API를 8000로 호출
-const API_BASE_URL = import.meta.env.VITE_AI_BASE_URL ?? 'http://127.0.0.1:8000/api/ai/recommend';
+// ADR-003: 상대경로 — Ingress/nginx가 같은 origin에서 backend로 라우팅해준다.
+const API_BASE_URL = '/api/ai/recommend';
 
 export function AIRecommendation({ user, onToggleInterest, interestedCourses }: AIRecommendationProps) {
   const [selectedField, setSelectedField] = useState<string | null>(null);

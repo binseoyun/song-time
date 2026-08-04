@@ -52,7 +52,9 @@ export type User = {
 
 export type Page = 'login' | 'home' | 'timetable' | 'courses' | 'ai' | 'mypage';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000';
+// ADR-003: frontend는 항상 자신을 서빙한 origin의 상대경로(/api/...)로만 호출한다.
+// (Ingress/nginx가 그 요청을 실제 backend로 넘겨준다 — 환경별로 다른 절대주소를 알 필요가 없다)
+const API_BASE_URL = '';
 
 export default function App() {
   const [currentPage, setCurrentPage] = useState<Page>('login');

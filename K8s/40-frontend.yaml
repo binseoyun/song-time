@@ -4,11 +4,11 @@ metadata:
   name: frontend-service
   namespace: sugang-system
 spec:
-  type: LoadBalancer # localhost:3000 접속용
+  # ADR-003: 외부 접속은 Ingress 하나로 통일 → 개별 서비스는 클러스터 내부에서만 필요(ClusterIP)
+  type: ClusterIP
   ports:
   - port: 3000
     targetPort: 3000
-    nodePort: 32565
   selector:
     app: frontend
 ---
@@ -29,28 +29,8 @@ spec:
     spec:
       containers:
       - name: frontend
-        image: binseoyun/frontend:v2
+        # ADR-003: frontend는 상대경로(/api/...)만 쓰므로 환경변수 주입 자체가 불필요해짐
+        image: binseoyun/frontend:v3
         imagePullPolicy: Always # ✅ K8s가 Docker Hub에서 이미지를 가져오도록 Always로 변경
         ports:
         - containerPort: 3000
-        env:
-            - name: VITE_API_BASE_URL
-              valueFrom:
-                configMapKeyRef:
-                  name: app-config
-                  key: FRONTEND_VITE_API_BASE_URL
-            - name: VITE_AUTH_BASE_URL
-              valueFrom:
-                configMapKeyRef:
-                  name: app-config
-                  key: FRONTEND_VITE_AUTH_BASE_URL
-            - name: VITE_AI_BASE_URL
-              valueFrom:
-                configMapKeyRef:
-                  name: app-config
-                  key: FRONTEND_VITE_AI_BASE_URL
-            - name: VITE_SCHEDULER_BASE_URL
-              valueFrom:
-                configMapKeyRef:
-                  name: app-config
-                  key: FRONTEND_VITE_SCHEDULER_BASE_URL

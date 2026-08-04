@@ -4,10 +4,8 @@ metadata:
   name: backend-service
   namespace: sugang-system
 spec:
-  # 외부 접속(LoadBalancer) 허용 (프론트가 브라우저에서 직접 호출할 경우 필요)
-  # 만약 프론트 컨테이너 내부에서만 호출한다면 ClusterIP여도 됨.
-  # 여기서는 안전하게 LoadBalancer로 둡니다.
-  type: LoadBalancer 
+  # ADR-003: 외부 접속은 Ingress 하나로 통일 → 개별 서비스는 클러스터 내부에서만 필요(ClusterIP)
+  type: ClusterIP
   ports:
   - port: 8000
     targetPort: 8000
@@ -65,9 +63,11 @@ spec:
         # AI 서버 연결 정보 (서비스 이름으로 호출)
         - name: AI_SERVER_URL
           value: "http://ai-server-service:5000"
-        # ★★★ [여기 추가] 이게 있어야 로그인이 됩니다! ★★★
         - name: JWT_SECRET
-          value: "mySuperSecretKey1234!"
+          valueFrom:
+            secretKeyRef:
+              name: app-secrets
+              key: jwt-secret
         - name: CRON_SECRET
           valueFrom:
             secretKeyRef:

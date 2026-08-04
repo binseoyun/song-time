@@ -21,8 +21,3 @@ data:
 
   # 3) 프로젝트 매니저: 소프트웨어공학, 캡스톤/프로젝트/융합/모바일/센서 관련 과목
   JOB_PM_COURSES: "21000555-1,21003682-1,21102993-1,21102993-2,21102983-1,21102983-2,21003076-1,21102529-1,21100722-1,21105365-1,21105365-2"
-
-  FRONTEND_VITE_API_BASE_URL: "http://backend-service:8000"
-  FRONTEND_VITE_AUTH_BASE_URL: "http://backend-service:8000/api/auth"
-  FRONTEND_VITE_AI_BASE_URL: "http://backend-service:8000/api/ai/recommend"
-  FRONTEND_VITE_SCHEDULER_BASE_URL: "http://ai-server-service:5000/api/schedule"
