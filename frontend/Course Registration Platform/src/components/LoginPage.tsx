@@ -10,20 +10,68 @@ type LoginPageProps = {
 const API_BASE_URL = '/api/auth';
 
 export function LoginPage({ onLogin }: LoginPageProps) {
-  
+
   const [isSignup, setIsSignup] = useState(false);
+  const [isReset, setIsReset] = useState(false);
   const [formData, setFormData] = useState({
     studentId: '',
     password: '',
     name: '',
     department: '',
   });
-  
+  const [resetData, setResetData] = useState({
+    studentId: '',
+    name: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
+
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [resetMessage, setResetMessage] = useState('');
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const handleResetChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setResetData({ ...resetData, [e.target.name]: e.target.value });
+  };
+
+  const handleResetSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setResetMessage('');
+
+    if (resetData.newPassword !== resetData.confirmPassword) {
+      setError('새 비밀번호가 일치하지 않습니다.');
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          studentId: resetData.studentId,
+          name: resetData.name,
+          newPassword: resetData.newPassword,
+        }),
+      });
+
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.message || '비밀번호 재설정에 실패했습니다.');
+      }
+
+      setResetMessage('비밀번호가 재설정되었습니다. 새 비밀번호로 로그인해주세요.');
+      setResetData({ studentId: '', name: '', newPassword: '', confirmPassword: '' });
+    } catch (err: any) {
+      setError(err.message || '서버 연결 실패. 백엔드가 켜져 있나요?');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -101,50 +149,44 @@ export function LoginPage({ onLogin }: LoginPageProps) {
           <p className="text-gray-600">개인화된 시간표 관리 서비스</p>
         </div>
 
-        <div className="flex gap-2 mb-6">
-          <button
-            onClick={() => { setIsSignup(false); setError(''); }}
-            className={`flex-1 py-2 rounded-lg transition-colors ${
-              !isSignup
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
-            disabled={isLoading}
-          >
-            <LogIn className="inline-block w-4 h-4 mr-2" />
-            로그인
-          </button>
-          <button
-            onClick={() => { setIsSignup(true); setError(''); }}
-            className={`flex-1 py-2 rounded-lg transition-colors ${
-              isSignup
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-            }`}
-            disabled={isLoading}
-          >
-            <UserPlus className="inline-block w-4 h-4 mr-2" />
-            회원가입
-          </button>
-        </div>
+        {isReset ? (
+          <>
+            {error && (
+              <div className="mb-4 p-3 bg-red-50 text-red-600 text-sm rounded-lg border border-red-100">
+                {error}
+              </div>
+            )}
+            {resetMessage && (
+              <div className="mb-4 p-3 bg-green-50 text-green-700 text-sm rounded-lg border border-green-100">
+                {resetMessage}
+              </div>
+            )}
 
-        {/* 에러 메시지 표시 영역 */}
-        {error && (
-          <div className="mb-4 p-3 bg-red-50 text-red-600 text-sm rounded-lg border border-red-100">
-            {error}
-          </div>
-        )}
+            <form onSubmit={handleResetSubmit} className="space-y-4">
+              <p className="text-gray-600 text-sm">
+                학번과 이름으로 본인 확인 후 새 비밀번호를 설정합니다.
+              </p>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {isSignup && (
-            <>
+              <div>
+                <label className="block text-gray-700 mb-2">학번</label>
+                <input
+                  type="text"
+                  name="studentId"
+                  value={resetData.studentId}
+                  onChange={handleResetChange}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="20240001"
+                  required
+                />
+              </div>
+
               <div>
                 <label className="block text-gray-700 mb-2">이름</label>
                 <input
                   type="text"
-                  name="name" // name 속성 추가
-                  value={formData.name}
-                  onChange={handleChange}
+                  name="name"
+                  value={resetData.name}
+                  onChange={handleResetChange}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="홍길동"
                   required
@@ -152,68 +194,176 @@ export function LoginPage({ onLogin }: LoginPageProps) {
               </div>
 
               <div>
-                <label className="block text-gray-700 mb-2">학과</label>
+                <label className="block text-gray-700 mb-2">새 비밀번호</label>
                 <input
-                  type="text"
-                  name="department" // name 속성 추가
-                  value={formData.department}
-                  onChange={handleChange}
+                  type="password"
+                  name="newPassword"
+                  value={resetData.newPassword}
+                  onChange={handleResetChange}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="컴퓨터공학과"
+                  placeholder="••••••••"
                   required
                 />
               </div>
-            </>
-          )}
 
-          <div>
-            <label className="block text-gray-700 mb-2">학번</label>
-            <input
-              type="text"
-              name="studentId" // name 속성 추가
-              value={formData.studentId}
-              onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="20240001"
-              required
-            />
-          </div>
+              <div>
+                <label className="block text-gray-700 mb-2">새 비밀번호 확인</label>
+                <input
+                  type="password"
+                  name="confirmPassword"
+                  value={resetData.confirmPassword}
+                  onChange={handleResetChange}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="••••••••"
+                  required
+                />
+              </div>
 
-          <div>
-            <label className="block text-gray-700 mb-2">비밀번호</label>
-            <input
-              type="password"
-              name="password" // name 속성 추가
-              value={formData.password}
-              onChange={handleChange}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              placeholder="••••••••"
-              required
-            />
-          </div>
+              <button
+                type="submit"
+                className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center"
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                    <span>처리 중...</span>
+                  </>
+                ) : (
+                  <span>비밀번호 재설정</span>
+                )}
+              </button>
+            </form>
 
-          <button
-            type="submit"
-            className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center"
-            disabled={isLoading}
-          >
-            {isLoading ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin mr-2" />
-                <span>처리 중...</span>
-              </>
-            ) : (
-              <span>{isSignup ? '회원가입' : '로그인'}</span>
+            <div className="mt-4 text-center">
+              <button
+                className="text-blue-600 hover:underline"
+                onClick={() => { setIsReset(false); setError(''); setResetMessage(''); }}
+              >
+                로그인으로 돌아가기
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="flex gap-2 mb-6">
+              <button
+                onClick={() => { setIsSignup(false); setError(''); }}
+                className={`flex-1 py-2 rounded-lg transition-colors ${
+                  !isSignup
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+                disabled={isLoading}
+              >
+                <LogIn className="inline-block w-4 h-4 mr-2" />
+                로그인
+              </button>
+              <button
+                onClick={() => { setIsSignup(true); setError(''); }}
+                className={`flex-1 py-2 rounded-lg transition-colors ${
+                  isSignup
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+                disabled={isLoading}
+              >
+                <UserPlus className="inline-block w-4 h-4 mr-2" />
+                회원가입
+              </button>
+            </div>
+
+            {/* 에러 메시지 표시 영역 */}
+            {error && (
+              <div className="mb-4 p-3 bg-red-50 text-red-600 text-sm rounded-lg border border-red-100">
+                {error}
+              </div>
             )}
-          </button>
-        </form>
 
-        {!isSignup && (
-          <div className="mt-4 text-center">
-            <button className="text-blue-600 hover:underline">
-              비밀번호를 잊으셨나요?
-            </button>
-          </div>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {isSignup && (
+                <>
+                  <div>
+                    <label className="block text-gray-700 mb-2">이름</label>
+                    <input
+                      type="text"
+                      name="name" // name 속성 추가
+                      value={formData.name}
+                      onChange={handleChange}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="홍길동"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-gray-700 mb-2">학과</label>
+                    <input
+                      type="text"
+                      name="department" // name 속성 추가
+                      value={formData.department}
+                      onChange={handleChange}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="컴퓨터공학과"
+                      required
+                    />
+                  </div>
+                </>
+              )}
+
+              <div>
+                <label className="block text-gray-700 mb-2">학번</label>
+                <input
+                  type="text"
+                  name="studentId" // name 속성 추가
+                  value={formData.studentId}
+                  onChange={handleChange}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="20240001"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-gray-700 mb-2">비밀번호</label>
+                <input
+                  type="password"
+                  name="password" // name 속성 추가
+                  value={formData.password}
+                  onChange={handleChange}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="••••••••"
+                  required
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center"
+                disabled={isLoading}
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin mr-2" />
+                    <span>처리 중...</span>
+                  </>
+                ) : (
+                  <span>{isSignup ? '회원가입' : '로그인'}</span>
+                )}
+              </button>
+            </form>
+
+            {!isSignup && (
+              <div className="mt-4 text-center">
+                <button
+                  className="text-blue-600 hover:underline"
+                  onClick={() => { setIsReset(true); setError(''); }}
+                >
+                  비밀번호를 잊으셨나요?
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

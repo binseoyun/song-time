@@ -77,7 +77,33 @@ exports.login = async (req, res) => {
         }
     };
 
-    //3. 로그아웃 controller
+    //3. 비밀번호 재설정 controller (학번+이름으로 본인확인 후 새 비밀번호로 교체)
+exports.resetPassword = async (req, res) => {
+    try {
+        const { studentId, name, newPassword } = req.body;
+
+        if (!studentId || !name || !newPassword) {
+            return res.status(400).json({ message: '학번, 이름, 새 비밀번호를 모두 입력해주세요.' });
+        }
+
+        // 학번과 이름이 동시에 일치하는 사용자만 찾음 — 어느 쪽이 틀렸는지는 알려주지 않음(계정 존재 여부 유추 방지)
+        const user = await User.findOne({ where: { studentId, name } });
+        if (!user) {
+            return res.status(400).json({ message: '학번 또는 이름이 일치하지 않습니다.' });
+        }
+
+        const hashedPassword = await bcrypt.hash(newPassword, 12);
+        user.password = hashedPassword;
+        await user.save();
+
+        res.status(200).json({ message: '비밀번호가 재설정되었습니다. 새 비밀번호로 로그인해주세요.' });
+    } catch (error) {
+        console.error('비밀번호 재설정 오류:', error);
+        res.status(500).json({ message: '서버 오류가 발생했습니다.' });
+    }
+};
+
+    //4. 로그아웃 controller
     exports.logout = async (req, res) => {
         try {
             // 클라이언트 측에서 토큰을 삭제하도록 안내

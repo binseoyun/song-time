@@ -29,7 +29,7 @@ spec:
     spec:
       containers:
       - name: backend
-        image: binseoyun/backend:v1
+        image: binseoyun/backend:v2
         imagePullPolicy: Always # ✅ K8s가 Docker Hub에서 이미지를 가져오도록 Always로 변경
         ports:
         - containerPort: 8000

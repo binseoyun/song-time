@@ -12,6 +12,9 @@ router.post('/signup', authController.register);
 // POST http://localhost:3000/api/auth/login
 router.post('/login', authController.login);
 
+// POST http://localhost:3000/api/auth/reset-password
+router.post('/reset-password', authController.resetPassword);
+
 //POST hyttp://localhost:3000/api/auth/logout
 router.post('/logout', authController.logout);
 
