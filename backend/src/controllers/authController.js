@@ -4,6 +4,10 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { JWT_SECRET } = require('../config/env');
 
+const sequelize = require('../config/database');
+const Class = require('../models/Class');
+const CourseInterest = require('../models/CourseInterest');
+
 //1. 회원가입 controller
 exports.register = async (req, res) => {
     try{
@@ -103,7 +107,61 @@ exports.resetPassword = async (req, res) => {
     }
 };
 
-    //4. 로그아웃 controller
+    //4. 회원 탈퇴 controller
+exports.deleteAccount = async (req, res) => {
+    try {
+        const userId = req.user?.id;
+        const { password } = req.body;
+
+        if (!userId) {
+            return res.status(401).json({ message: '인증이 필요합니다.' });
+        }
+        if (!password) {
+            return res.status(400).json({ message: '비밀번호를 입력해주세요.' });
+        }
+
+        const user = await User.findByPk(userId);
+        if (!user) {
+            return res.status(404).json({ message: '사용자 정보를 찾을 수 없습니다.' });
+        }
+
+        const isMatch = await bcrypt.compare(password, user.password);
+        if (!isMatch) {
+            return res.status(400).json({ message: '비밀번호가 올바르지 않습니다.' });
+        }
+
+        await sequelize.transaction(async (t) => {
+            // 탈퇴 전, 이 유저가 관심 등록해둔 과목들의 enrolled 카운터를 먼저 되돌려놓는다.
+            // Users 행을 바로 지우면 course_interests는 ON DELETE CASCADE로 같이 지워지지만,
+            // 그건 DB 레벨 삭제라 courseController.toggleInterest의 enrolled 증감 로직을 안 거친다 —
+            // 그대로 두면 탈퇴한 유저의 관심 카운트가 Class.enrolled에 유령처럼 남는다.
+            const interests = await CourseInterest.findAll({
+                where: { user_id: userId },
+                transaction: t,
+                lock: t.LOCK.UPDATE,
+            });
+
+            for (const interest of interests) {
+                await Class.decrement('enrolled', {
+                    by: 1,
+                    where: { id: interest.class_id },
+                    transaction: t,
+                    lock: t.LOCK.UPDATE,
+                });
+            }
+
+            // Users 행 삭제 — course_interests, timetables는 ON DELETE CASCADE로 함께 정리됨
+            await user.destroy({ transaction: t });
+        });
+
+        res.status(200).json({ message: '회원 탈퇴가 완료되었습니다.' });
+    } catch (error) {
+        console.error('회원 탈퇴 오류:', error);
+        res.status(500).json({ message: '서버 오류가 발생했습니다.' });
+    }
+};
+
+    //5. 로그아웃 controller
     exports.logout = async (req, res) => {
         try {
             // 클라이언트 측에서 토큰을 삭제하도록 안내

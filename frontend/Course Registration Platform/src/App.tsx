@@ -315,6 +315,37 @@ export default function App() {
     }
   };
 
+  // 🔹 회원 탈퇴: 현재 비밀번호 확인 후 계정 삭제, 성공하면 로그아웃과 동일하게 상태 정리
+  const handleDeleteAccount = async (password: string) => {
+    if (!authToken) {
+      throw new Error('로그인이 필요합니다.');
+    }
+
+    const response = await fetch(`${API_BASE_URL}/api/auth/account`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({ password }),
+    });
+
+    const result = await response.json();
+    if (!response.ok) {
+      throw new Error(result.message || '회원 탈퇴에 실패했습니다.');
+    }
+
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('currentUser');
+    setAuthToken(null);
+    setUser(null);
+    setCurrentPage('login');
+    setSavedTimetables([]);
+    setInterestedCourses([]);
+    setInterestAlerts([]);
+    setInterestError(null);
+  };
+
   const handleSaveTimetable = async (payload: TimetablePayload) => {
     if (!authToken || !user) {
       setTimetableError('로그인 후 시간표를 저장할 수 있습니다.');
@@ -594,6 +625,7 @@ export default function App() {
             interestedCourses={interestedCourses}
             courses={courses}
             onDeleteTimetable={handleDeleteTimetable}
+            onDeleteAccount={handleDeleteAccount}
           />
         )}
       </main>

@@ -1,7 +1,7 @@
 import { User, Timetable, Course } from '../App';
 import { TimetableView } from './TimetableView'; // 경로 수정
 import { useState } from 'react';
-import { User as UserIcon, Calendar, Heart, Clock, BookOpen } from 'lucide-react';
+import { User as UserIcon, Calendar, Heart, Clock, BookOpen, Loader2 } from 'lucide-react';
 
 type MyPageProps = {
   user: User;
@@ -9,10 +9,32 @@ type MyPageProps = {
   interestedCourses: string[];
   courses: Course[];
   onDeleteTimetable?: (timetableId: string) => void;
+  onDeleteAccount?: (password: string) => Promise<void>;
 }
 
-export function MyPage({ user, savedTimetables, interestedCourses, courses, onDeleteTimetable }: MyPageProps) {
+export function MyPage({ user, savedTimetables, interestedCourses, courses, onDeleteTimetable, onDeleteAccount }: MyPageProps) {
   const [selectedTimetable, setSelectedTimetable] = useState<Timetable | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+
+  const handleDeleteAccountClick = async () => {
+    if (!onDeleteAccount) return;
+    setDeleteError('');
+    if (!deletePassword) {
+      setDeleteError('비밀번호를 입력해주세요.');
+      return;
+    }
+    setIsDeleting(true);
+    try {
+      await onDeleteAccount(deletePassword);
+      // 성공하면 App.tsx가 로그인 화면으로 전환시키므로 이 컴포넌트는 곧 언마운트됨
+    } catch (err: any) {
+      setDeleteError(err.message || '회원 탈퇴에 실패했습니다.');
+      setIsDeleting(false);
+    }
+  };
 
   const interestedCourseDetails = courses.filter((c) =>
     interestedCourses.includes(c.id)
@@ -182,7 +204,73 @@ export function MyPage({ user, savedTimetables, interestedCourses, courses, onDe
           </div>
         )}
       </div>
-      
+
+      {/* 회원 탈퇴 */}
+      {onDeleteAccount && (
+        <div className="bg-white rounded-lg shadow-md p-6 border border-red-100">
+          <h3 className="text-red-600 mb-2">회원 탈퇴</h3>
+          <p className="text-gray-500 text-sm mb-4">
+            탈퇴하면 저장된 시간표와 관심 과목을 포함한 모든 정보가 즉시 삭제되며 복구할 수 없습니다.
+          </p>
+
+          {!showDeleteConfirm ? (
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              className="px-4 py-2 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50"
+            >
+              회원 탈퇴
+            </button>
+          ) : (
+            <div className="space-y-3">
+              {deleteError && (
+                <div className="p-3 bg-red-50 text-red-600 text-sm rounded-lg border border-red-100">
+                  {deleteError}
+                </div>
+              )}
+              <div>
+                <label className="block text-gray-700 mb-2 text-sm">
+                  본인 확인을 위해 현재 비밀번호를 입력해주세요
+                </label>
+                <input
+                  type="password"
+                  value={deletePassword}
+                  onChange={(e) => setDeletePassword(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                  placeholder="••••••••"
+                />
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleDeleteAccountClick}
+                  disabled={isDeleting}
+                  className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center justify-center gap-2"
+                >
+                  {isDeleting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>처리 중...</span>
+                    </>
+                  ) : (
+                    <span>정말 탈퇴합니다</span>
+                  )}
+                </button>
+                <button
+                  onClick={() => {
+                    setShowDeleteConfirm(false);
+                    setDeletePassword('');
+                    setDeleteError('');
+                  }}
+                  disabled={isDeleting}
+                  className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50"
+                >
+                  취소
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
     </div>
   );
 }
