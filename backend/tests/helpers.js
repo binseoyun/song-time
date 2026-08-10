@@ -44,6 +44,7 @@ async function createClass(overrides = {}) {
     credits: 3,
     capacity: 30,
     enrolled: 0,
+    remainingSeats: overrides.capacity ?? 30,
     department: '컴퓨터공학과',
     courseType: '전공 필수',
     ...overrides,
