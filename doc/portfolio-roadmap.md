@@ -14,6 +14,7 @@
   - [x] Docker Hub 이미지 이관(`krpark1108` → `binseoyun`) 및 kind 클러스터 배포 검증(Phase 3 착수 전 사전 점검): `app-secrets`의 `cron-secret` 키 누락으로 backend가 못 뜨던 문제, frontend 이미지가 Vite 빌드 시점에 docker-compose용 주소를 번들에 구워 K8s에서 API 호출이 조용히 깨지던 문제 발견 및 수정 ([트러블슈팅 02](troubleshooting/02-kind-배포-명령어-레퍼런스.md), [K8s 아키텍처 다이어그램](architecture/k8s-architecture.html), 2026-07-22)
 - [x] **로드맵 외 작업**: 비밀번호 재설정 기능 추가 — DB 스키마/로그인 흐름 수정에 앞서 사용자 요청으로 진행. "찾기"가 아닌 "재설정" 방식 채택, bcrypt 단방향 해시 특성상 원본 비밀번호 노출이 불가능함을 근거로 설계 ([ADR-004](ADR/ADR-004-비밀번호-재설정-기능-추가.md), 2026-08-04)
 - [x] **로드맵 외 작업**: 회원 탈퇴 기능 추가 — 하드 삭제 채택, `course_interests`/`timetables`는 `ON DELETE CASCADE`로 자동 정리되지만 `Class.enrolled` 카운터는 CASCADE를 안 거쳐서 별도 감소 처리 필요했음을 발견·수정 ([ADR-005](ADR/ADR-005-회원-탈퇴-기능-추가.md), 2026-08-04)
+- [x] **로드맵 외 작업**: Git 작업 규칙 정의 — Issue 기반 계획 → 브랜치 네이밍(`타입/#이슈번호-내용`) → Conventional Commits(`타입: 제목 (#이슈번호)`) → PR(`Closes #N`) → 머지 시 이슈 자동 종료 + 브랜치 삭제로 흐름 고정. Phase 4(CI/CD)에서 "PR merge = 배포 트리거"를 명확히 하기 위한 선행 작업 ([git-workflow.md](git-workflow.md), PR 템플릿: `.github/pull_request_template.md`, 2026-08-10)
 - [ ] Phase 2. 동시성 개선 ← 다음 작업
 - [x] Phase 3. K8s 운영화 (일부, 당겨서 진행) — Ingress 도입 + frontend same-origin 전환: K8s 배포 후 브라우저에서 로그인 검증 자체가 불가능했던 문제(클러스터 내부 DNS를 브라우저가 해석 못함) 해결. LoadBalancer×2 → Ingress 1개로 진입점 통합, docker-compose에도 nginx 리버스 프록시로 동일 구조 적용 ([ADR-003](ADR/ADR-003-Ingress-도입과-Frontend-API-주소-구성-방식-전환.md), 2026-08-04)
 - [ ] Phase 3. 나머지 (Probe 재설계, resource requests/limits+HPA, DB 마이그레이션 도구 도입)
