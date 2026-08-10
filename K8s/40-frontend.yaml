@@ -30,7 +30,7 @@ spec:
       containers:
       - name: frontend
         # ADR-003: frontend는 상대경로(/api/...)만 쓰므로 환경변수 주입 자체가 불필요해짐
-        image: binseoyun/frontend:v5
+        image: binseoyun/frontend:v7
         imagePullPolicy: Always # ✅ K8s가 Docker Hub에서 이미지를 가져오도록 Always로 변경
         ports:
         - containerPort: 3000
