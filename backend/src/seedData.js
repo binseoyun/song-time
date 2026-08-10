@@ -1339,6 +1339,7 @@ async function seedDatabase() {
           credits: c.credits,
           capacity: c.capacity,
           enrolled: c.enrolled,
+          remainingSeats: c.capacity,
           department: c.department,
           courseType: c.courseType
         }

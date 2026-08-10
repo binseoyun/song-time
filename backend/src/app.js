@@ -8,10 +8,12 @@ const Class = require('./models/Class');
 const ClassSchedule = require('./models/ClassSchedule');
 const CourseInterest = require('./models/CourseInterest');
 const Timetable = require('./models/Timetable');
+const Registration = require('./models/Registration');
 const authRoutes = require('./routes/authRoutes');
 const aiRoutes = require('./routes/aiRoutes');
 const courseRoutes = require('./routes/courseRoutes');
 const timetableRoutes = require('./routes/timetableRoutes');
+const registrationRoutes = require('./routes/registrationRoutes');
 
 const app = express();
 
@@ -38,6 +40,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/courses', courseRoutes);
 app.use('/api/timetables', timetableRoutes);
+app.use('/api/registrations', registrationRoutes);
 
 Class.hasMany(ClassSchedule, { foreignKey: 'class_id', as: 'schedules' });
 ClassSchedule.belongsTo(Class, { foreignKey: 'class_id' });
@@ -58,6 +61,11 @@ CourseInterest.belongsTo(User, { foreignKey: 'user_id' });
 CourseInterest.belongsTo(Class, { foreignKey: 'class_id' });
 User.hasMany(Timetable, { foreignKey: 'user_id', as: 'timetables' });
 Timetable.belongsTo(User, { foreignKey: 'user_id' });
+
+User.hasMany(Registration, { foreignKey: 'user_id' });
+Registration.belongsTo(User, { foreignKey: 'user_id' });
+Class.hasMany(Registration, { foreignKey: 'class_id' });
+Registration.belongsTo(Class, { foreignKey: 'class_id' });
 
 app.use((req, res) => {
   console.log(`[404] Not Found: ${req.url}`);
