@@ -6,8 +6,8 @@
 
 # Node.js 의존성 및 빌드
 **/node_modules
-/dist
-/build
+**/dist
+**/build
 npm-debug.log*
 
 # Python 의존성 및 캐시
