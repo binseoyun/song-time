@@ -27,6 +27,9 @@ Untitled
 
 # 기존 팀 레포 git 백업
 .git-backup-team-repo/
+
+# 부하테스트 시딩 산출물 (JWT 토큰 등, 매 회차 재생성됨)
+loadtest/generated/
 node_modules
 node_modules
 node_modules

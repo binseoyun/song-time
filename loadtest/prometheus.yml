@@ -1,0 +1,9 @@
+# k6가 --out experimental-prometheus-rw로 직접 push하므로 별도 scrape 대상은 없다.
+# --web.enable-remote-write-receiver 플래그(docker-compose.loadtest.yml)로 수신을 켠다.
+global:
+  scrape_interval: 5s
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
