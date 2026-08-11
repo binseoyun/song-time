@@ -58,6 +58,8 @@ services:
     volumes:
       - ./loadtest/scripts:/scripts:ro
       - ./loadtest/generated:/loadtest/generated:ro
+      # --summary-export 결과를 실험 원본 데이터 위치(실험계획서 01 9장)에 바로 쓴다.
+      - ./doc/experiment/raw:/raw
     environment:
       K6_PROMETHEUS_RW_SERVER_URL: http://prometheus:9090/api/v1/write
       # 기본값은 p99뿐이라 실험계획서 01의 p50/p95/p99 지표를 다 보려면 명시해야 한다.
