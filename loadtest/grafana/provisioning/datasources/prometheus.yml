@@ -4,6 +4,7 @@ apiVersion: 1
 
 datasources:
   - name: Prometheus
+    uid: prometheus # 대시보드 JSON(dashboards/registration-loadtest.json)이 이 UID로 데이터소스를 참조한다
     type: prometheus
     access: proxy
     url: http://prometheus:9090
