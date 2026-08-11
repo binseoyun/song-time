@@ -62,6 +62,10 @@ services:
       K6_PROMETHEUS_RW_SERVER_URL: http://prometheus:9090/api/v1/write
       # 기본값은 p99뿐이라 실험계획서 01의 p50/p95/p99 지표를 다 보려면 명시해야 한다.
       K6_PROMETHEUS_RW_TREND_STATS: "p(50),p(95),p(99)"
+      # 기본 5s로는 짧은 spike 회차 도중 샘플이 1~2개뿐이라 TPS 그래프가 계단식으로 보인다.
+      # 1s로 낮춰도 아주 낮은 VU 구간은 여전히 순간적으로 끝나지만(실측 확인),
+      # 스윕 상위 구간(1,000명 이상)처럼 실제로 몇 초 이상 걸리는 회차에서는 해상도가 올라간다.
+      K6_PROMETHEUS_RW_PUSH_INTERVAL: 1s
       TARGET_BASE_URL: http://nginx
       TARGET_PATH: /api/registrations/naive
       CLASS_ID: 21001083-2

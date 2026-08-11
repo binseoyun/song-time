@@ -3,21 +3,38 @@
   "uid": "registration-loadtest",
   "editable": true,
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "5s",
   "time": { "from": "now-15m", "to": "now" },
   "timezone": "browser",
   "tags": ["loadtest", "registration"],
+  "templating": {
+    "list": [
+      {
+        "name": "group",
+        "type": "query",
+        "label": "Group (TARGET_PATH)",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": { "query": "label_values(k6_http_reqs_total, group)", "refId": "GroupVariable" },
+        "refresh": 2,
+        "multi": true,
+        "includeAll": true,
+        "current": { "text": "All", "value": "$__all" },
+        "sort": 1
+      }
+    ]
+  },
   "panels": [
     {
       "id": 1,
       "type": "stat",
       "title": "성공 (201)",
+      "description": "raw Counter의 최신값(lastNotNull) — k6는 실행마다 새 프로세스라 매 회차 0부터 다시 세므로 회차 간 누적되지 않는다. 지금 보고 있는 회차의 진행 상황을 보는 용도.",
       "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
-          "expr": "sum(k6_registration_success_total)",
+          "expr": "sum(k6_registration_success_total{group=~\"$group\"})",
           "legendFormat": "success",
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "prometheus" }
@@ -46,7 +63,7 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
-          "expr": "sum(k6_registration_rejected_total)",
+          "expr": "sum(k6_registration_rejected_total{group=~\"$group\"})",
           "legendFormat": "rejected",
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "prometheus" }
@@ -75,7 +92,7 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
-          "expr": "sum(k6_registration_server_error_total)",
+          "expr": "sum(k6_registration_server_error_total{group=~\"$group\"})",
           "legendFormat": "server_error",
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "prometheus" }
@@ -100,6 +117,7 @@
       "id": 4,
       "type": "stat",
       "title": "현재 VUs",
+      "description": "k6_vus는 요청 단위 지표가 아니라 프로세스 전역 게이지라 group 라벨이 없다 — $group 필터 적용 대상 아님",
       "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
@@ -129,12 +147,12 @@
       "id": 5,
       "type": "timeseries",
       "title": "TPS (초당 요청 수, 그룹별)",
-      "description": "TARGET_PATH(naive/pessimistic)별로 겹쳐서 비교",
+      "description": "per-vu-iterations 스파이크 패턴은 VU가 동시에 1회씩만 쏘고 끝나 전체 요청이 push 간격(수 초)보다 빨리 끝난다 — 낮은 VU 구간에서는 카운터가 계단식으로 한 번에 점프해 이 그래프가 곡선으로 안 보일 수 있다(윈도우를 더 줄여도 해결 안 됨, 실측 확인됨). 1,000명 이상처럼 실제로 몇 초 이상 걸리는 구간에서 의미가 커진다. 짧은 회차의 정확한 TPS는 k6 CLI 요약(http_reqs 라인)을 참고.",
       "gridPos": { "h": 8, "w": 24, "x": 0, "y": 4 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
-          "expr": "sum by (group) (rate(k6_http_reqs_total[30s]))",
+          "expr": "sum by (group) (irate(k6_http_reqs_total{group=~\"$group\"}[15s]))",
           "legendFormat": "{{group}}",
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "prometheus" }
@@ -153,24 +171,24 @@
       "id": 6,
       "type": "timeseries",
       "title": "응답시간 p50 / p95 / p99 (그룹별)",
-      "description": "실험계획서 01 DV — Group B의 커넥션 풀 고갈 시 p95/p99가 급격히 치솟는지 관찰",
+      "description": "실험계획서 01 DV — Group B의 커넥션 풀 고갈 시 p95/p99가 급격히 치솟는지 관찰. 여러 그룹을 동시에 보면 최대 9개 선이 겹칠 수 있으니, 상단 group 변수로 그룹 하나만 선택해서 보는 걸 권장.",
       "gridPos": { "h": 8, "w": 24, "x": 0, "y": 12 },
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
-          "expr": "max by (group) (k6_http_req_duration_p50)",
+          "expr": "max by (group) (k6_http_req_duration_p50{group=~\"$group\"})",
           "legendFormat": "{{group}} p50",
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "prometheus" }
         },
         {
-          "expr": "max by (group) (k6_http_req_duration_p95)",
+          "expr": "max by (group) (k6_http_req_duration_p95{group=~\"$group\"})",
           "legendFormat": "{{group}} p95",
           "refId": "B",
           "datasource": { "type": "prometheus", "uid": "prometheus" }
         },
         {
-          "expr": "max by (group) (k6_http_req_duration_p99)",
+          "expr": "max by (group) (k6_http_req_duration_p99{group=~\"$group\"})",
           "legendFormat": "{{group}} p99",
           "refId": "C",
           "datasource": { "type": "prometheus", "uid": "prometheus" }
@@ -193,7 +211,7 @@
       "datasource": { "type": "prometheus", "uid": "prometheus" },
       "targets": [
         {
-          "expr": "max by (group) (k6_http_req_failed_rate)",
+          "expr": "max by (group) (k6_http_req_failed_rate{group=~\"$group\"})",
           "legendFormat": "{{group}}",
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "prometheus" }
