@@ -14,6 +14,11 @@
 #
 # 중간에 멈춰도 안전: 이미 만들어진 summary JSON이 있는 (level, group, rep)는
 # 건너뛴다 — 같은 명령을 다시 실행하면 이어서 진행된다.
+#
+# Grafana 실시간 관찰: 회차 하나가 몇 초 만에 끝나버리고 카운터도 매 회차 리셋되므로
+# "화면 앞에서 실시간으로 지켜보기"는 사실상 어렵다. 대신 회차마다 실행 구간을 정확히
+# 기록해서, 끝난 뒤 그 구간으로 바로 이동하는 Grafana 링크를 로그/CSV에 남긴다
+# (PAUSE_SECONDS로 회차 사이 텀을 늘리면 그 짧은 순간 실시간으로 보는 것도 가능).
 set -uo pipefail
 # -e를 일부러 안 켠다: 회차 하나가 실패해도(타임아웃 등) 전체 배치를 멈추지 않고
 # 실패로 기록한 뒤 다음 회차로 넘어간다 — 12,000명 구간처럼 붕괴가 "기대되는" 실험이라
@@ -31,10 +36,29 @@ BASE_URL="${TARGET_BASE_URL:-http://nginx}"
 # 실험계획서 01 6장: 기본 시나리오(500명 근사치 포함) + 7단계 스윕
 LEVELS=(${LEVELS:-50 100 300 500 1000 3000 12000})
 REPS="${REPS:-5}"
+# 회차 사이 쉬는 시간(초). 기본은 짧게(자동 배치 위주). 직접 눈으로 몇 회차만 보고
+# 싶으면 예: PAUSE_SECONDS=20 ./loadtest/scripts/run-experiment-01.sh
+PAUSE_SECONDS="${PAUSE_SECONDS:-2}"
+GRAFANA_URL="${GRAFANA_URL:-http://localhost:3300}"
 
 mkdir -p "$RAW_DIR"
 LOG_FILE="$RAW_DIR/run-log-$(date +%Y%m%d-%H%M%S).csv"
-echo "level,group,rep,started_at_epoch,duration_s,k6_success,k6_rejected,k6_server_error,http_reqs,final_remaining_seats,final_registrations,status" > "$LOG_FILE"
+echo "level,group,rep,started_at_epoch,duration_s,k6_success,k6_rejected,k6_server_error,http_reqs,final_remaining_seats,final_registrations,status,grafana_url" > "$LOG_FILE"
+
+# 회차의 실행 구간(약간 여유 포함)으로 바로 이동하는 Grafana 대시보드 링크를 만든다.
+# group 변수까지 필터링해서 넘겨 그 회차의 그룹만 딱 보이게 한다.
+grafana_link() {
+  local group_path="$1" started="$2" ended="$3"
+  local from_ms=$(( (started - 3) * 1000 ))
+  local to_ms=$(( (ended + 5) * 1000 ))
+  local encoded_group
+  case "$group_path" in
+    "/api/registrations/naive") encoded_group="%2Fapi%2Fregistrations%2Fnaive" ;;
+    "/api/registrations/pessimistic") encoded_group="%2Fapi%2Fregistrations%2Fpessimistic" ;;
+    *) encoded_group="$group_path" ;;
+  esac
+  echo "${GRAFANA_URL}/d/registration-loadtest/experiment-01?orgId=1&from=${from_ms}&to=${to_ms}&var-group=${encoded_group}"
+}
 
 log() { echo "[$(date '+%H:%M:%S')] $*"; }
 
@@ -133,8 +157,16 @@ run_one() {
   remaining=$(echo "$db_state" | cut -d',' -f1)
   regs=$(echo "$db_state" | cut -d',' -f2)
 
-  echo "$vus,$group_label,$rep,$started,$duration,$success,$rejected,$servererr,$reqs,$remaining,$regs,$status" >> "$LOG_FILE"
+  local link
+  link=$(grafana_link "$group_path" "$started" "$ended")
+
+  echo "$vus,$group_label,$rep,$started,$duration,$success,$rejected,$servererr,$reqs,$remaining,$regs,$status,$link" >> "$LOG_FILE"
   log "  완료 (${duration}s) success=$success rejected=$rejected error=$servererr | DB: remainingSeats=$remaining registrations=$regs | $status"
+  log "  Grafana: $link"
+
+  if [ "$PAUSE_SECONDS" -gt 0 ]; then
+    sleep "$PAUSE_SECONDS"
+  fi
 }
 
 log "실험 01 시작 — levels=(${LEVELS[*]}) reps=$REPS"
