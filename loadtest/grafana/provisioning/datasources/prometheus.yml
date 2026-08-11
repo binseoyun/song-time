@@ -1,0 +1,11 @@
+# Grafana 기동 시 Prometheus 데이터소스를 자동으로 등록한다 (ADR-006 4.2:
+# "수동 개입 없이 Docker Compose로 100% 자동 환경 구성" 결정 근거를 실제로 지킨다).
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true
