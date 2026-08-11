@@ -68,11 +68,12 @@ export default function () {
     '201(성공) 또는 409(정원초과/중복)': (r) => r.status === 201 || r.status === 409,
   });
 
+  const counterTags = { group: TARGET_PATH };
   if (res.status === 201) {
-    registered.add(1);
+    registered.add(1, counterTags);
   } else if (res.status === 409) {
-    rejectedByBusiness.add(1);
+    rejectedByBusiness.add(1, counterTags);
   } else {
-    rejectedByServer.add(1);
+    rejectedByServer.add(1, counterTags);
   }
 }
