@@ -60,6 +60,8 @@ services:
       - ./loadtest/generated:/loadtest/generated:ro
     environment:
       K6_PROMETHEUS_RW_SERVER_URL: http://prometheus:9090/api/v1/write
+      # 기본값은 p99뿐이라 실험계획서 01의 p50/p95/p99 지표를 다 보려면 명시해야 한다.
+      K6_PROMETHEUS_RW_TREND_STATS: "p(50),p(95),p(99)"
       TARGET_BASE_URL: http://nginx
       TARGET_PATH: /api/registrations/naive
       CLASS_ID: 21001083-2
