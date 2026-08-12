@@ -1,0 +1,377 @@
+<!doctype html>
+<title>실험 01 — 동시성 수준별 처리 결과</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  .viz-root {
+    color-scheme: light;
+    --surface-1: #fcfcfb;
+    --page: #f9f9f7;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted: #898781;
+    --grid: #e1e0d9;
+    --axis: #c3c2b7;
+    --border: rgba(11, 11, 11, 0.1);
+    --series-a: #2a78d6; /* Group A: 무방비 */
+    --series-b: #eb6834; /* Group B: 비관적 락 */
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) .viz-root {
+      color-scheme: dark;
+      --surface-1: #1a1a19;
+      --page: #0d0d0d;
+      --text-primary: #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted: #898781;
+      --grid: #2c2c2a;
+      --axis: #383835;
+      --border: rgba(255, 255, 255, 0.1);
+      --series-a: #3987e5;
+      --series-b: #d95926;
+    }
+  }
+  :root[data-theme="dark"] .viz-root {
+    color-scheme: dark;
+    --surface-1: #1a1a19;
+    --page: #0d0d0d;
+    --text-primary: #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted: #898781;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --border: rgba(255, 255, 255, 0.1);
+    --series-a: #3987e5;
+    --series-b: #d95926;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--page);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: var(--text-primary);
+  }
+  .viz-root { max-width: 980px; margin: 0 auto; padding: 32px 20px 60px; }
+
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .subtitle { color: var(--text-secondary); font-size: 14px; margin: 0 0 28px; }
+
+  .card {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 20px 8px;
+    margin-bottom: 24px;
+  }
+  .card h2 { font-size: 15px; margin: 0 0 2px; }
+  .card .desc { font-size: 13px; color: var(--text-secondary); margin: 0 0 12px; }
+
+  .legend { display: flex; gap: 18px; align-items: center; margin: 0 0 12px; font-size: 13px; color: var(--text-secondary); }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-key { width: 16px; height: 2px; border-radius: 1px; }
+
+  svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .grid-line { stroke: var(--grid); stroke-width: 1; }
+  .axis-line { stroke: var(--axis); stroke-width: 1; }
+  .axis-label { fill: var(--text-muted); font-size: 11px; }
+  .series-line { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .series-dot { stroke: var(--surface-1); stroke-width: 2; }
+  .end-label { font-size: 12px; font-weight: 600; }
+  .hit-area { fill: transparent; cursor: crosshair; }
+
+  .crosshair { stroke: var(--axis); stroke-width: 1; opacity: 0; pointer-events: none; }
+  .tooltip {
+    position: absolute;
+    pointer-events: none;
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 12px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+    opacity: 0;
+    transition: opacity 0.1s;
+    white-space: nowrap;
+    z-index: 10;
+  }
+  .tooltip-title { color: var(--text-secondary); margin-bottom: 4px; }
+  .tooltip-row { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
+  .tooltip-key { width: 10px; height: 2px; border-radius: 1px; }
+  .tooltip-value { font-weight: 700; color: var(--text-primary); margin-left: auto; padding-left: 10px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 4px; color: var(--text-primary); }
+  caption { text-align: left; font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; }
+  th, td { text-align: right; padding: 6px 10px; border-bottom: 1px solid var(--grid); font-variant-numeric: tabular-nums; color: var(--text-primary); }
+  th:first-child, td:first-child { text-align: left; font-variant-numeric: normal; }
+  th { color: var(--text-muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.02em; }
+
+  .chart-wrap { position: relative; }
+</style>
+
+<div class="viz-root">
+  <h1>실험 01 — 동시성 수준별 처리 결과 (Group A vs B)</h1>
+  <p class="subtitle">
+    정원 50석 · 2026-08-12 정식 실행(70회차, 그룹당 5회 반복) ·
+    원본: <code>doc/experiment/raw/run-log-20260812-132818.csv</code> ·
+    결과 해설: <a href="01-결과.md">01-결과.md</a>
+  </p>
+
+  <div class="legend">
+    <div class="legend-item"><span class="legend-key" style="background:var(--series-a)"></span>Group A (무방비)</div>
+    <div class="legend-item"><span class="legend-key" style="background:var(--series-b)"></span>Group B (비관적 락)</div>
+  </div>
+
+  <div class="card">
+    <h2>정상 처리율 (handled rate)</h2>
+    <p class="desc">(성공 201 + 정상거절 409) / 전체 요청. 100%면 서버가 모든 요청에 명확히 응답, 낮을수록 5xx/timeout 비율이 높다는 뜻.</p>
+    <div class="chart-wrap" id="chart-handled"></div>
+  </div>
+
+  <div class="card">
+    <h2>오버셀 (성공 건수 − 정원 50)</h2>
+    <p class="desc">0이어야 정합성이 지켜진 것. Group A는 레벨 100부터 정원을 초과해 계속 성공 응답을 내보낸다.</p>
+    <div class="chart-wrap" id="chart-oversell"></div>
+  </div>
+
+  <div class="card">
+    <table>
+      <caption>회차별 평균값 (n=5) — 표 형태로도 동일한 값 확인 가능</caption>
+      <thead>
+        <tr>
+          <th>레벨</th>
+          <th>그룹</th>
+          <th>success 평균</th>
+          <th>handled_rate</th>
+          <th>오버셀</th>
+        </tr>
+      </thead>
+      <tbody id="data-table-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  const DATA = [
+    { level: 50, group: 'A', success: 50.0, handled: 100.0 },
+    { level: 50, group: 'B', success: 50.0, handled: 100.0 },
+    { level: 100, group: 'A', success: 100.0, handled: 100.0 },
+    { level: 100, group: 'B', success: 50.0, handled: 100.0 },
+    { level: 300, group: 'A', success: 300.0, handled: 100.0 },
+    { level: 300, group: 'B', success: 50.0, handled: 100.0 },
+    { level: 500, group: 'A', success: 500.0, handled: 100.0 },
+    { level: 500, group: 'B', success: 50.0, handled: 100.0 },
+    { level: 1000, group: 'A', success: 966.4, handled: 96.6 },
+    { level: 1000, group: 'B', success: 50.0, handled: 95.8 },
+    { level: 3000, group: 'A', success: 967.2, handled: 32.2 },
+    { level: 3000, group: 'B', success: 50.0, handled: 32.0 },
+    { level: 12000, group: 'A', success: 974.8, handled: 8.1 },
+    { level: 12000, group: 'B', success: 50.0, handled: 9.1 },
+  ];
+  const CAPACITY = 50;
+  const LEVELS = [50, 100, 300, 500, 1000, 3000, 12000];
+
+  const root = document.querySelector('.viz-root');
+  const isDark = () => {
+    const stamp = document.documentElement.getAttribute('data-theme');
+    if (stamp === 'dark') return true;
+    if (stamp === 'light') return false;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+  };
+  const cssVar = (name) => getComputedStyle(root).getPropertyValue(name).trim();
+
+  // --- table (accessible fallback, built once) ---
+  const tbody = document.getElementById('data-table-body');
+  for (const d of DATA) {
+    const tr = document.createElement('tr');
+    const cells = [
+      d.level.toLocaleString(),
+      d.group === 'A' ? 'A (무방비)' : 'B (비관적 락)',
+      d.success.toFixed(1),
+      d.handled.toFixed(1) + '%',
+      (d.success - CAPACITY).toFixed(1),
+    ];
+    cells.forEach((text, i) => {
+      const td = document.createElement(i === 0 || i === 1 ? 'td' : 'td');
+      td.textContent = text;
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  }
+
+  // --- log-scale line chart builder ---
+  function buildChart(container, { yLabel, yMax, yTicks, getY, valueFmt }) {
+    const W = 900, H = 300, M = { top: 16, right: 24, bottom: 34, left: 46 };
+    const plotW = W - M.left - M.right;
+    const plotH = H - M.top - M.bottom;
+
+    const xLog = (level) => {
+      const t = (Math.log(level) - Math.log(LEVELS[0])) / (Math.log(LEVELS[LEVELS.length - 1]) - Math.log(LEVELS[0]));
+      return M.left + t * plotW;
+    };
+    const yScale = (v) => M.top + plotH - (v / yMax) * plotH;
+
+    const svgNS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(svgNS, 'svg');
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    container.appendChild(svg);
+
+    // gridlines + y ticks
+    for (const t of yTicks) {
+      const y = yScale(t);
+      const line = document.createElementNS(svgNS, 'line');
+      line.setAttribute('x1', M.left); line.setAttribute('x2', W - M.right);
+      line.setAttribute('y1', y); line.setAttribute('y2', y);
+      line.setAttribute('class', 'grid-line');
+      svg.appendChild(line);
+
+      const label = document.createElementNS(svgNS, 'text');
+      label.setAttribute('x', M.left - 8); label.setAttribute('y', y + 3);
+      label.setAttribute('text-anchor', 'end');
+      label.setAttribute('class', 'axis-label');
+      label.textContent = valueFmt(t);
+      svg.appendChild(label);
+    }
+
+    // x axis
+    const axisLine = document.createElementNS(svgNS, 'line');
+    axisLine.setAttribute('x1', M.left); axisLine.setAttribute('x2', W - M.right);
+    axisLine.setAttribute('y1', M.top + plotH); axisLine.setAttribute('y2', M.top + plotH);
+    axisLine.setAttribute('class', 'axis-line');
+    svg.appendChild(axisLine);
+
+    for (const level of LEVELS) {
+      const x = xLog(level);
+      const tick = document.createElementNS(svgNS, 'text');
+      tick.setAttribute('x', x); tick.setAttribute('y', M.top + plotH + 18);
+      tick.setAttribute('text-anchor', 'middle');
+      tick.setAttribute('class', 'axis-label');
+      tick.textContent = level.toLocaleString();
+      svg.appendChild(tick);
+    }
+
+    // lines + dots per group
+    const groups = { A: [], B: [] };
+    for (const level of LEVELS) {
+      for (const g of ['A', 'B']) {
+        const row = DATA.find((d) => d.level === level && d.group === g);
+        groups[g].push({ level, value: getY(row) });
+      }
+    }
+
+    const colorFor = (g) => cssVar(g === 'A' ? '--series-a' : '--series-b');
+
+    for (const g of ['A', 'B']) {
+      const pts = groups[g];
+      const pathD = pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${xLog(p.level)} ${yScale(p.value)}`).join(' ');
+      const path = document.createElementNS(svgNS, 'path');
+      path.setAttribute('d', pathD);
+      path.setAttribute('class', 'series-line');
+      path.setAttribute('stroke', colorFor(g));
+      svg.appendChild(path);
+
+      pts.forEach((p) => {
+        const dot = document.createElementNS(svgNS, 'circle');
+        dot.setAttribute('cx', xLog(p.level)); dot.setAttribute('cy', yScale(p.value));
+        dot.setAttribute('r', 4);
+        dot.setAttribute('fill', colorFor(g));
+        dot.setAttribute('class', 'series-dot');
+        svg.appendChild(dot);
+      });
+
+      // end label
+      const last = pts[pts.length - 1];
+      const endLabel = document.createElementNS(svgNS, 'text');
+      endLabel.setAttribute('x', xLog(last.level) + 8);
+      endLabel.setAttribute('y', yScale(last.value) + (g === 'A' ? -6 : 12));
+      endLabel.setAttribute('class', 'end-label');
+      endLabel.setAttribute('fill', colorFor(g));
+      endLabel.textContent = `${g}: ${valueFmt(last.value)}`;
+      svg.appendChild(endLabel);
+    }
+
+    // crosshair + tooltip
+    const crosshair = document.createElementNS(svgNS, 'line');
+    crosshair.setAttribute('y1', M.top); crosshair.setAttribute('y2', M.top + plotH);
+    crosshair.setAttribute('class', 'crosshair');
+    svg.appendChild(crosshair);
+
+    const tooltip = document.createElement('div');
+    tooltip.className = 'tooltip';
+    container.appendChild(tooltip);
+
+    const hit = document.createElementNS(svgNS, 'rect');
+    hit.setAttribute('x', M.left); hit.setAttribute('y', M.top);
+    hit.setAttribute('width', plotW); hit.setAttribute('height', plotH);
+    hit.setAttribute('class', 'hit-area');
+    svg.appendChild(hit);
+
+    function nearestLevel(px) {
+      let best = LEVELS[0], bestDist = Infinity;
+      for (const level of LEVELS) {
+        const d = Math.abs(xLog(level) - px);
+        if (d < bestDist) { bestDist = d; best = level; }
+      }
+      return best;
+    }
+
+    function showTooltip(evt) {
+      const rect = svg.getBoundingClientRect();
+      const px = ((evt.clientX - rect.left) / rect.width) * W;
+      const level = nearestLevel(px);
+      const x = xLog(level);
+      crosshair.setAttribute('x1', x); crosshair.setAttribute('x2', x);
+      crosshair.style.opacity = 1;
+
+      const rowA = DATA.find((d) => d.level === level && d.group === 'A');
+      const rowB = DATA.find((d) => d.level === level && d.group === 'B');
+      tooltip.innerHTML = '';
+      const title = document.createElement('div');
+      title.className = 'tooltip-title';
+      title.textContent = `동시 ${level.toLocaleString()}명`;
+      tooltip.appendChild(title);
+      for (const [g, row] of [['A', rowA], ['B', rowB]]) {
+        const tr = document.createElement('div');
+        tr.className = 'tooltip-row';
+        const key = document.createElement('span');
+        key.className = 'tooltip-key';
+        key.style.background = colorFor(g);
+        tr.appendChild(key);
+        const label = document.createElement('span');
+        label.textContent = g === 'A' ? 'Group A' : 'Group B';
+        tr.appendChild(label);
+        const val = document.createElement('span');
+        val.className = 'tooltip-value';
+        val.textContent = valueFmt(getY(row));
+        tr.appendChild(val);
+        tooltip.appendChild(tr);
+      }
+
+      const containerRect = container.getBoundingClientRect();
+      const svgLeft = rect.left - containerRect.left;
+      tooltip.style.left = Math.min(svgLeft + (x / W) * rect.width + 12, container.clientWidth - 160) + 'px';
+      tooltip.style.top = '8px';
+      tooltip.style.opacity = 1;
+    }
+    function hideTooltip() {
+      crosshair.style.opacity = 0;
+      tooltip.style.opacity = 0;
+    }
+    hit.addEventListener('pointermove', showTooltip);
+    hit.addEventListener('pointerleave', hideTooltip);
+  }
+
+  buildChart(document.getElementById('chart-handled'), {
+    yMax: 100,
+    yTicks: [0, 25, 50, 75, 100],
+    getY: (row) => row.handled,
+    valueFmt: (v) => v.toFixed(1) + '%',
+  });
+
+  buildChart(document.getElementById('chart-oversell'), {
+    yMax: 1000,
+    yTicks: [0, 250, 500, 750, 1000],
+    getY: (row) => row.success - CAPACITY,
+    valueFmt: (v) => Math.round(v).toLocaleString() + '건',
+  });
+</script>
