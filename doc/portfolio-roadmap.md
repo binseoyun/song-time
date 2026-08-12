@@ -19,7 +19,11 @@
   - 설계: [ADR-006](ADR/ADR-006-실시간-수강신청-설계.md) — 아직 약 10개 결정이 통합된 설계 문서 상태. 각 결정을 실제로 구체화하는 시점마다 개별 ADR로 분리한다.
   - 구현 시 별도 "수강신청" 탭을 신설하고, 실제 학교 수강신청 사이트와 동일한 UI/UX를 목표로 한다.
   - 구현 순서 및 Stage별 측정 계획(naive 버전으로 Before 증명 → 개선 → After 재측정 원칙 포함): [실시간-수강신청-구현계획.md](실시간-수강신청-구현계획.md)
-- [ ] Phase 2. 동시성 개선 ← 다음 작업 — 기존 `courseController.js`의 정원 초과 방지 로직 부재 문제(로드맵 P1)를 다룬다. 위 실시간 수강신청 신규 기능과는 별개 트랙.
+- [ ] Phase 2. 동시성 개선 ← 진행 중 — 기존 `courseController.js`의 정원 초과 방지 로직 부재 문제(로드맵 P1)를 다룬다. 위 실시간 수강신청 신규 기능과는 별개 트랙.
+  - [x] 실험 01(Group A/B) 정식 실행 및 결과 기록 — [결과](experiment/01-결과.md) (2026-08-12, PR #20)
+  - [x] 실험계획서 03(Group D 낙관적 락·fail-fast / Group E 낙관적 락·재시도) 작성 — [계획](experiment/03-낙관적락-fail-fast-재시도-실험계획.md). ADR-006이 이론적으로만 배제한 낙관적 락을 실측으로 검증하기 위함 (2026-08-12)
+  - [ ] Group D/E API 구현 및 실행 (실험계획서 03 실행)
+  - [ ] Group C(Redis 원자적 연산) 구현 및 실행 (실험계획서 01 Stage 1)
 - [x] Phase 3. K8s 운영화 (일부, 당겨서 진행) — Ingress 도입 + frontend same-origin 전환: K8s 배포 후 브라우저에서 로그인 검증 자체가 불가능했던 문제(클러스터 내부 DNS를 브라우저가 해석 못함) 해결. LoadBalancer×2 → Ingress 1개로 진입점 통합, docker-compose에도 nginx 리버스 프록시로 동일 구조 적용 ([ADR-003](ADR/ADR-003-Ingress-도입과-Frontend-API-주소-구성-방식-전환.md), 2026-08-04)
 - [ ] Phase 3. 나머지 (Probe 재설계, resource requests/limits+HPA, DB 마이그레이션 도구 도입)
 - [ ] Phase 4. CI/CD
