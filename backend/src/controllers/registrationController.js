@@ -7,11 +7,16 @@ const STATUS_BY_CODE = {
   NOT_FOUND: 404,
   DUPLICATE: 409,
   FULL: 409,
+  // Lua 스크립트의 실패 사유(중복/시간표겹침/정원마감)는 전부 409로 통일한다.
+  // 실험 01의 k6 스크립트가 success/rejected/server_error 3분류만 쓰므로,
+  // 세부 사유는 HTTP status가 아니라 응답 바디로만 구분해 기존 실험과 비교 가능하게 한다.
+  // (doc/experiment/03-낙관적락-fail-fast-재시도-실험계획.md 3장과 동일한 원칙)
+  OVERLAP: 409,
 };
 
-function parseRequest(req, res) {
+// classId는 등록(body)과 취소(params) 요청에서 오는 위치가 다르므로 호출부에서 넘긴다.
+function parseRequest(req, res, classId) {
   const userId = req.user?.id;
-  const { classId } = req.body;
 
   if (!userId) {
     res.status(401).json({ message: '인증이 필요합니다.' });
@@ -33,7 +38,7 @@ function handleError(error, res, logLabel) {
 }
 
 exports.registerNaive = async (req, res) => {
-  const input = parseRequest(req, res);
+  const input = parseRequest(req, res, req.body.classId);
   if (!input) return;
 
   try {
@@ -45,7 +50,7 @@ exports.registerNaive = async (req, res) => {
 };
 
 exports.registerPessimistic = async (req, res) => {
-  const input = parseRequest(req, res);
+  const input = parseRequest(req, res, req.body.classId);
   if (!input) return;
 
   try {
@@ -53,5 +58,29 @@ exports.registerPessimistic = async (req, res) => {
     res.status(201).json({ message: '수강신청이 완료되었습니다.', registration });
   } catch (error) {
     handleError(error, res, '수강신청(비관적 락)');
+  }
+};
+
+exports.registerRedis = async (req, res) => {
+  const input = parseRequest(req, res, req.body.classId);
+  if (!input) return;
+
+  try {
+    const registration = await registrationService.registerRedisAtomic(input);
+    res.status(201).json({ message: '수강신청이 완료되었습니다.', registration });
+  } catch (error) {
+    handleError(error, res, '수강신청(Redis 원자적 연산)');
+  }
+};
+
+exports.cancelRedis = async (req, res) => {
+  const input = parseRequest(req, res, req.params.classId);
+  if (!input) return;
+
+  try {
+    await registrationService.cancelRedisAtomic(input);
+    res.status(200).json({ message: '수강신청이 취소되었습니다.' });
+  } catch (error) {
+    handleError(error, res, '수강신청 취소(Redis)');
   }
 };
