@@ -33,12 +33,78 @@ services:
       DB_HOST: db
       DB_PORT: 3306
       AI_SERVER_URL: http://ai-server:5000
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      RABBITMQ_URL: amqp://rabbitmq
     command: sh -c "node src/seedData.js && node src/server.js"
     depends_on:
       db:
         condition: service_healthy
     ports:
       - "8080:8000"
+    restart: unless-stopped
+
+  # Group C(Redis 원자적 연산)의 좌석/신청/시간표 카운터. AOF/RDB 영속화는 끈다 —
+  # 지금 계획된 카오스 시나리오는 워커/API 서버 kill이지 Redis 재시작이 아니고,
+  # 재시작 시 데이터는 seedRedisRegistrations.js로 다시 채운다
+  # (doc/portfolio/01-group-c-redis-설계-결정.md 참고).
+  redis:
+    image: redis:7.4-alpine
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+
+  # Group C 비동기 영속화용 브로커. registration.persist / registration.persist.dlq
+  # 큐는 backend/src/config/rabbitmq.js의 connect()가 기동 시 자동으로 assert한다.
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    ports:
+      - "5672:5672"
+      - "15672:15672" # management UI (게스트/게스트 기본 계정, 로컬 전용)
+    restart: unless-stopped
+
+  # RabbitMQ 워커 2개(worker_1/worker_2)를 별도 서비스로 명시한다 — 카오스 테스트(1-8)에서
+  # "워커 하나만 골라서 죽이고 나머지가 계속 처리하는지"를 이름으로 재현 가능하게 확인해야
+  # 하기 때문에, `--scale` 대신 이 방식을 선택했다
+  # (doc/portfolio/01-group-c-redis-설계-결정.md 참고).
+  worker_1:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file:
+      - .env.docker
+    environment:
+      DB_HOST: db
+      DB_PORT: 3306
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      RABBITMQ_URL: amqp://rabbitmq
+    command: node src/worker.js
+    depends_on:
+      db:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    restart: unless-stopped
+
+  worker_2:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file:
+      - .env.docker
+    environment:
+      DB_HOST: db
+      DB_PORT: 3306
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      RABBITMQ_URL: amqp://rabbitmq
+    command: node src/worker.js
+    depends_on:
+      db:
+        condition: service_healthy
+      backend:
+        condition: service_started
     restart: unless-stopped
 
   ai-server:
