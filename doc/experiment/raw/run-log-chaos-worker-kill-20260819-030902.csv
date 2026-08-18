@@ -1,0 +1,2 @@
+rep,killed_worker,vus,kill_delay_s,started_at_epoch,duration_s,k6_success,mysql_registrations,duplicate_rows,redelivery_evidence_lines,worker_restarted,dlq_depth,drain_wait_s,status
+1,worker_1,100,0.1,1787076546,3,100,100,0,5,no,0,0,ok+WORKER_NOT_RESTARTED

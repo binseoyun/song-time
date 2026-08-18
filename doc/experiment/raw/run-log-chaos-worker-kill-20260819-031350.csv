@@ -1,0 +1,7 @@
+rep,killed_worker,vus,kill_delay_s,started_at_epoch,duration_s,k6_success,mysql_registrations,duplicate_rows,redelivery_evidence_lines,worker_restarted,dlq_depth,drain_wait_s,status
+1,worker_1,500,0.15,1787076834,4,500,500,0,5,no,0,3,ok+NO_AUTO_RESTART(manually-restarted)
+2,worker_2,500,0.15,1787076855,5,500,500,0,5,no,0,1,ok+NO_AUTO_RESTART(manually-restarted)
+3,worker_1,500,0.15,1787076876,5,500,500,0,5,no,0,0,ok+NO_AUTO_RESTART(manually-restarted)
+4,worker_2,500,0.15,1787076895,4,500,500,0,5,no,0,2,ok+NO_AUTO_RESTART(manually-restarted)
+5,worker_1,500,0.15,1787076915,4,500,500,0,5,no,0,0,ok+NO_AUTO_RESTART(manually-restarted)
+6,worker_2,500,0.15,1787076933,5,500,500,0,5,no,0,3,ok+NO_AUTO_RESTART(manually-restarted)

@@ -17,7 +17,17 @@ const MAX_ATTEMPTS = 5;
 // 성립한다. 그래서 한 번에 하나씩만 가져가게(prefetch=1) 한다.
 const PREFETCH_COUNT = 1;
 
+// 카오스 테스트(1-8) 전용 디버그 훅: 기본값 0이면 평소 동작에 전혀 영향이 없다.
+// 로컬 환경은 INSERT 한 건이 수십 ms 안에 끝나버려서, 외부에서 docker kill로
+// "메시지 처리 도중"을 정확히 맞히는 게 사실상 불가능하다(셸/Docker CLI 반응
+// 속도가 그보다 느림) — 그래서 이 실험에서만 명시적으로 CHAOS_TEST_DELAY_MS를
+// 켜서 ack 전 구간을 인위적으로 늘려, kill 타이밍을 확정적으로 재현한다.
+const CHAOS_TEST_DELAY_MS = Number(process.env.CHAOS_TEST_DELAY_MS) || 0;
+
 async function persist({ userId, classId, publishedAt }) {
+  if (CHAOS_TEST_DELAY_MS > 0) {
+    await new Promise((resolve) => setTimeout(resolve, CHAOS_TEST_DELAY_MS));
+  }
   await Registration.create({ user_id: userId, class_id: classId });
   const leadTimeMs = Date.now() - publishedAt;
   console.log(`[worker] MySQL 반영 완료 userId=${userId} classId=${classId} leadTimeMs=${leadTimeMs}ms`);
