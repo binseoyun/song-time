@@ -14,9 +14,13 @@
  *     node scripts/seedRedisRegistrations.js
  *
  * 환경변수:
- *   CLASS_ID          초기화할 실험 대상 과목 id (기본 '21001083-2', seedLoadTestAccounts.js와 동일)
- *   OVERLAP_CLASS_ID  시간표 겹침 어뷰징 시나리오(1-6)용 두 번째 과목 id (기본 '21002144-1' —
- *                     월/수 11:00~12:50로 CLASS_ID의 월/수 12:00~13:15와 [12:00,12:50) 구간이 겹침)
+ *   CLASS_ID           초기화할 실험 대상 과목 id (기본 '21001083-2', seedLoadTestAccounts.js와 동일)
+ *   OVERLAP_CLASS_ID   시간표 겹침 어뷰징 시나리오(1-6)용 두 번째 과목 id (기본 '21002144-1' —
+ *                      월/수 11:00~12:50로 CLASS_ID의 월/수 12:00~13:15와 [12:00,12:50) 구간이 겹침)
+ *
+ * 참고: overlap 시나리오의 "이미 CLASS_ID 신청함" 전제는 더 이상 이 스크립트의 좌석
+ * override로 만들지 않는다 — seedOverlapPreconditions.js가 라이브 등록 없이 Redis에
+ * 직접 시딩한다(구현계획 Stage 1-7 3순위, doc/troubleshooting/05 참고).
  */
 const sequelize = require('../src/config/database');
 const redis = require('../src/config/redis');
