@@ -23,7 +23,23 @@ services:
       timeout: 5s
       retries: 5
 
-  backend:
+  # backend API 서버를 2 replica로 분리한다(doc/troubleshooting/05 2순위) — Node는
+  # 이벤트 루프 하나라 CPU 바운드 구간(JWT 검증 등)이 단일 인스턴스로는 순차 처리될
+  # 수밖에 없어, nginx 커넥션 튜닝(1순위)만으로는 VUS=3,000급 순간 부하에서
+  # request timeout이 남았다. `--scale` 대신 명시적으로 서비스를 2개 나눈 이유는
+  # RabbitMQ 워커(worker_1/worker_2)와 같다 — 오픈소스 nginx의 정적 upstream은
+  # 시작 시 DNS를 한 번만 resolve해서, `--scale`로 띄운 레플리카끼리는 실제로
+  # 부하분산이 안 될 수 있다(nginx가 그중 하나만 계속 쓰게 됨).
+  #
+  # seedData.js(과목 마스터 데이터 시딩)는 findOrCreate 기반이라 완전히 동시성
+  # 안전하지 않다 — 두 인스턴스가 동시에 실행하면 이 프로젝트가 이번 세션 내내
+  # 다뤄온 것과 같은 종류의 레이스가 생길 수 있어, backend_1만 시딩을 맡는다.
+  #
+  # 호스트 포트(8080:8000) 직접 노출은 뺐다 — 컨테이너 2개를 같은 호스트 포트에
+  # 매핑할 수 없어서 이 시점에 정리가 필요했고, nginx(8090)가 이미 same-origin으로
+  # /api를 전부 프록시하므로(ADR-003) 직접 노출은 이슈 #31이 지적한 우회로일
+  # 뿐이었다 — 이 변경으로 그 문제가 자연히 함께 해소된다.
+  backend_1:
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -40,8 +56,27 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    ports:
-      - "8080:8000"
+    restart: unless-stopped
+
+  backend_2:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file:
+      - .env.docker
+    environment:
+      DB_HOST: db
+      DB_PORT: 3306
+      AI_SERVER_URL: http://ai-server:5000
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      RABBITMQ_URL: amqp://rabbitmq
+    command: node src/server.js
+    depends_on:
+      db:
+        condition: service_healthy
+      backend_1:
+        condition: service_started
     restart: unless-stopped
 
   # Group C(Redis 원자적 연산)의 좌석/신청/시간표 카운터. AOF/RDB 영속화는 끈다 —
@@ -83,7 +118,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      backend:
+      backend_1:
         condition: service_started
     restart: unless-stopped
 
@@ -103,7 +138,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      backend:
+      backend_1:
         condition: service_started
     restart: unless-stopped
 
@@ -114,7 +149,7 @@ services:
     env_file:
       - .env.docker
     depends_on:
-      - backend
+      - backend_1
     ports:
       - "5000:5000"
     restart: unless-stopped
@@ -124,7 +159,7 @@ services:
       context: ./frontend/Course Registration Platform
       dockerfile: Dockerfile
     depends_on:
-      - backend
+      - backend_1
     ports:
       - "3001:3000"
     restart: unless-stopped
@@ -134,10 +169,12 @@ services:
   nginx:
     image: nginx:alpine
     volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       - frontend
-      - backend
+      - backend_1
+      - backend_2
       - ai-server
     ports:
       - "8090:80"

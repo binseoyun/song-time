@@ -1,7 +1,7 @@
 version: "3.9"
 
 # Stage 0 (이슈 #13) 부하테스트 도구 모음. 기본 스택(docker-compose.yml) 위에 얹어서 쓴다.
-# backend 서비스에 볼륨을 덧붙이므로(21-23행) 기본 스택도 반드시 이 파일과 함께 올려야 한다.
+# backend_1 서비스에 볼륨을 덧붙이므로(21-23행) 기본 스택도 반드시 이 파일과 함께 올려야 한다.
 #
 # 사용법 (프로젝트 루트에서):
 #   0) 전체 스택 기동 (최초 1회 또는 재기동 시)
@@ -9,7 +9,7 @@ version: "3.9"
 #      Grafana: http://localhost:3300 (익명 Admin 접속, 로그인 불필요)
 #
 #   1) 계정 시딩 + 실험 대상 과목 초기화 (매 회차 전 반드시 재실행 — 실험계획서 01 7장)
-#      docker compose -f docker-compose.yml -f docker-compose.loadtest.yml exec backend \
+#      docker compose -f docker-compose.yml -f docker-compose.loadtest.yml exec backend_1 \
 #        node scripts/seedLoadTestAccounts.js
 #
 #   2) k6 실행 (그룹/동시성 수준별로 반복 실행)
@@ -17,10 +17,12 @@ version: "3.9"
 #        -e TARGET_PATH=/api/registrations/naive -e VUS=500 k6
 
 services:
-  # 기본 스택(docker-compose.yml)의 backend 서비스에 볼륨만 덧붙인다.
+  # 기본 스택(docker-compose.yml)의 backend_1 서비스에 볼륨만 덧붙인다(doc/troubleshooting/05
+  # 2순위로 backend가 backend_1/backend_2 두 개로 나뉘었다 — 시딩 스크립트는 어느 인스턴스에서
+  # 돌려도 결과는 같은 DB/Redis에 반영되지만, 시딩 실행 담당인 backend_1에 볼륨을 둔다).
   # seedLoadTestAccounts.js가 여기 쓴 토큰 파일(/loadtest/generated/tokens.json)을
   # k6 컨테이너가 동일 호스트 경로 마운트로 읽는다.
-  backend:
+  backend_1:
     volumes:
       - ./loadtest/generated:/loadtest/generated
 
