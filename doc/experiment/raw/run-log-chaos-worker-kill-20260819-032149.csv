@@ -1,0 +1,2 @@
+rep,killed_worker,total_requests,rate_per_s,duration_s_planned,kill_delay_s,started_at_epoch,duration_s,k6_success,mysql_registrations,duplicate_rows,redeliver_delta,worker_auto_restarted,dlq_depth,drain_wait_s,status
+1,worker_1,120,20,6,3,1787077313,9,120,120,0,0,no,0,1,ok+NO_AUTO_RESTART(manually-restarted)+NO_REDELIVERY_OBSERVED(kill 타이밍이 처리 구간을 못 잡음)

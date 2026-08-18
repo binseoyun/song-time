@@ -1,0 +1,7 @@
+rep,killed_worker,total_requests,rate_per_s,duration_s_planned,kill_delay_s,started_at_epoch,duration_s,k6_success,mysql_registrations,duplicate_rows,redeliver_delta,worker_auto_restarted,dlq_depth,drain_wait_s,status
+1,worker_1,450,30,15,7,1787077850,18,450,450,0,0,no,0,0,ok+NO_AUTO_RESTART(manually-restarted)+NO_REDELIVERY_OBSERVED(kill 타이밍이 처리 구간을 못 잡음)
+2,worker_2,450,30,15,7,1787077880,19,450,450,0,1,no,0,0,ok+NO_AUTO_RESTART(manually-restarted)
+3,worker_1,450,30,15,7,1787077911,18,450,450,0,0,no,0,0,ok+NO_AUTO_RESTART(manually-restarted)+NO_REDELIVERY_OBSERVED(kill 타이밍이 처리 구간을 못 잡음)
+4,worker_2,450,30,15,7,1787077942,18,450,450,0,0,no,0,0,ok+NO_AUTO_RESTART(manually-restarted)+NO_REDELIVERY_OBSERVED(kill 타이밍이 처리 구간을 못 잡음)
+5,worker_1,450,30,15,7,1787077973,18,450,450,0,1,no,0,0,ok+NO_AUTO_RESTART(manually-restarted)
+6,worker_2,450,30,15,7,1787078005,18,450,450,0,0,no,0,0,ok+NO_AUTO_RESTART(manually-restarted)+NO_REDELIVERY_OBSERVED(kill 타이밍이 처리 구간을 못 잡음)
