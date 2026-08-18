@@ -46,7 +46,18 @@ async function getChannel() {
   return channelPromise;
 }
 
+// 카오스 테스트(1-9) 전용 디버그 훅: 기본값 0이면 평소 동작에 전혀 영향이 없다.
+// registerRedisAtomic이 publishToQueue를 await 없이 fire-and-forget으로 호출하므로
+// (Ghost Decrement를 감수하는 대신 응답 속도를 얻는 설계, doc/portfolio/01 참고),
+// 이 딜레이는 HTTP 응답 시점에는 영향을 주지 않고 "Redis 판정 성공 이후 ~ 발행이
+// 실제로 끝나기 전" 구간만 인위적으로 넓힌다 — 1-8의 CHAOS_TEST_DELAY_MS와 같은
+// 이유(로컬 환경은 이 구간이 수 ms 안에 끝나 외부 kill 타이밍으로는 못 잡음)로 추가.
+const CHAOS_API_DELAY_MS = Number(process.env.CHAOS_API_DELAY_MS) || 0;
+
 async function publishToQueue(queueName, messageObj) {
+  if (CHAOS_API_DELAY_MS > 0) {
+    await new Promise((resolve) => setTimeout(resolve, CHAOS_API_DELAY_MS));
+  }
   const channel = await getChannel();
   channel.sendToQueue(queueName, Buffer.from(JSON.stringify(messageObj)), {
     persistent: true,
