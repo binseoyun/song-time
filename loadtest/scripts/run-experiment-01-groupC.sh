@@ -58,8 +58,8 @@ mkdir -p "$RAW_DIR"
 log() { echo "[$(date '+%H:%M:%S')] $*"; }
 
 # --- 사전 점검 ---
-if ! $COMPOSE ps backend 2>/dev/null | grep -q "Up"; then
-  echo "backend 컨테이너가 안 떠 있습니다. 먼저 다음을 실행하세요:"
+if ! $COMPOSE ps backend_1 2>/dev/null | grep -q "Up"; then
+  echo "backend_1 컨테이너가 안 떠 있습니다. 먼저 다음을 실행하세요:"
   echo "  docker compose -f docker-compose.yml -f docker-compose.loadtest.yml up -d"
   exit 1
 fi
@@ -71,9 +71,9 @@ fi
 reseed() {
   local vus="$1" class_seats_override="${2:-}"
   $COMPOSE exec -T -e ACCOUNT_COUNT="$vus" -e CLASS_ID="$CLASS_ID" -e OVERLAP_CLASS_ID="$OVERLAP_CLASS_ID" \
-    backend node scripts/seedLoadTestAccounts.js >/dev/null 2>&1
+    backend_1 node scripts/seedLoadTestAccounts.js >/dev/null 2>&1
   $COMPOSE exec -T -e CLASS_ID="$CLASS_ID" -e OVERLAP_CLASS_ID="$OVERLAP_CLASS_ID" -e CLASS_SEATS_OVERRIDE="$class_seats_override" \
-    backend node scripts/seedRedisRegistrations.js >/dev/null 2>&1
+    backend_1 node scripts/seedRedisRegistrations.js >/dev/null 2>&1
 }
 
 # 큐 깊이(messages) 하나를 정수로 반환. 조회 실패 시 빈 문자열.
@@ -109,7 +109,7 @@ wait_for_drain() {
 # stdout: "<redis 잔여좌석>,<MySQL registrations 수>"
 final_db_state() {
   local class_id="$1"
-  $COMPOSE exec -T -e TARGET_CLASS_ID="$class_id" backend node -e "
+  $COMPOSE exec -T -e TARGET_CLASS_ID="$class_id" backend_1 node -e "
     const sequelize = require('./src/config/database');
     const redis = require('./src/config/redis');
     const Registration = require('./src/models/Registration');
