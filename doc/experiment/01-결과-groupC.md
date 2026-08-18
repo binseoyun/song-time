@@ -90,7 +90,7 @@ macro/overlap 어뷰징 시나리오에서 `http_req_failed`의 대부분이 `Po
 
 ## 5. 다음 단계 (범위 밖 → 후속 이슈)
 
-- **어뷰징 시나리오 재실행 전 개선**: `PAUSE_SECONDS`를 늘려 회차 간 회복 시간 확보, `MACRO_REQUESTS`를 낮춰 순간 커넥션 밀도 완화, 또는 nginx/backend 커넥션 처리 한도(worker_connections, Node HTTP server backlog) 자체를 조정 — 이번 실행은 "Before"로 남기고, 개선 후 "After"로 재실행해 비교
+- **어뷰징 시나리오 재실행 전 개선**: 원인 분석과 우선순위별 개선안, 검증 계획은 [트러블슈팅 05](../troubleshooting/05-어뷰징-시나리오-로컬-인프라-커넥션-한계와-개선계획.md)에 별도로 정리했다 — 이번 실행은 "Before"로 남기고, 개선 후 "After"로 재실행해 비교
 - 카오스 테스트(워커 kill, Producer kill) — 구현계획 1-8/1-9
 - Group A/B/C 종합 결과 정리, Little's Law 기반 Active 인원 산출 — 구현계획 1-11
 
