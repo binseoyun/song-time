@@ -109,42 +109,26 @@ describe('classifyMacroBatch', () => {
 });
 
 describe('classifyOverlapAttempt', () => {
-  test('첫 신청 성공 + 겹침 신청이 OVERLAP으로 거부 → 정상(위반 아님)', () => {
-    const result = classifyOverlapAttempt(
-      { status: 201, message: null },
-      { status: 409, message: OVERLAP_MESSAGE }
-    );
+  // "이미 CLASS_ID를 신청해둔 상태"는 이제 seedOverlapPreconditions.js가 Redis에
+  // 직접 시딩해두므로(구현계획 Stage 1-7 3순위), k6는 겹침 신청 요청 하나만 보내고
+  // 그 응답 하나만 판정한다 — 예전처럼 첫 신청 응답까지 함께 넘기지 않는다.
+  test('겹침 신청이 OVERLAP으로 거부 → 정상(위반 아님)', () => {
+    const result = classifyOverlapAttempt({ status: 409, message: OVERLAP_MESSAGE });
 
-    expect(result).toEqual({ firstOk: true, secondRejectedByOverlap: true, isViolation: false });
-  });
-
-  test('첫 신청부터 실패하면 위반 (겹침 시나리오 전제가 깨진 것 — CLASS_SEATS_OVERRIDE 누락 등)', () => {
-    const result = classifyOverlapAttempt(
-      { status: 409, message: FULL_MESSAGE },
-      { status: 201, message: null }
-    );
-
-    expect(result.firstOk).toBe(false);
-    expect(result.isViolation).toBe(true);
+    expect(result).toEqual({ rejectedByOverlap: true, isViolation: false });
   });
 
   test('겹침 신청이 거부되지 않고 성공해버리면 위반 (진짜 SINTER 버그)', () => {
-    const result = classifyOverlapAttempt(
-      { status: 201, message: null },
-      { status: 201, message: null }
-    );
+    const result = classifyOverlapAttempt({ status: 201, message: null });
 
-    expect(result.secondRejectedByOverlap).toBe(false);
+    expect(result.rejectedByOverlap).toBe(false);
     expect(result.isViolation).toBe(true);
   });
 
   test('겹침 신청이 OVERLAP이 아니라 다른 사유(FULL 등)로 거부되면 위반', () => {
-    const result = classifyOverlapAttempt(
-      { status: 201, message: null },
-      { status: 409, message: FULL_MESSAGE }
-    );
+    const result = classifyOverlapAttempt({ status: 409, message: FULL_MESSAGE });
 
-    expect(result.secondRejectedByOverlap).toBe(false);
+    expect(result.rejectedByOverlap).toBe(false);
     expect(result.isViolation).toBe(true);
   });
 });

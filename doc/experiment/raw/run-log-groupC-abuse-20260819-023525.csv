@@ -1,0 +1,2 @@
+scenario,vus,rep,started_at_epoch,duration_s,metric1,metric2,metric3,metric4,metric5,mysql_target_registrations,mysql_overlap_registrations,dlq_depth,drain_wait_s,status
+macro,12000,1,1787074525,59,50,10,19903,4037,2933,50,0,0,0,ok

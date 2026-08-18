@@ -51,7 +51,7 @@ LEVELS=(${LEVELS:-50 100 300 500 1000 3000 12000})
 REPS="${REPS:-5}"
 ABUSE_LEVELS=(${ABUSE_LEVELS:-3000 12000})
 ABUSE_REPS="${ABUSE_REPS:-3}"
-MACRO_REQUESTS="${MACRO_REQUESTS:-5}"
+MACRO_REQUESTS="${MACRO_REQUESTS:-2}"
 
 mkdir -p "$RAW_DIR"
 
@@ -69,11 +69,20 @@ if ! curl -s -u "$RABBITMQ_AUTH" "$RABBITMQ_MGMT/api/overview" >/dev/null 2>&1; 
 fi
 
 reseed() {
-  local vus="$1" class_seats_override="${2:-}"
+  local vus="$1"
   $COMPOSE exec -T -e ACCOUNT_COUNT="$vus" -e CLASS_ID="$CLASS_ID" -e OVERLAP_CLASS_ID="$OVERLAP_CLASS_ID" \
     backend_1 node scripts/seedLoadTestAccounts.js >/dev/null 2>&1
-  $COMPOSE exec -T -e CLASS_ID="$CLASS_ID" -e OVERLAP_CLASS_ID="$OVERLAP_CLASS_ID" -e CLASS_SEATS_OVERRIDE="$class_seats_override" \
+  $COMPOSE exec -T -e CLASS_ID="$CLASS_ID" -e OVERLAP_CLASS_ID="$OVERLAP_CLASS_ID" \
     backend_1 node scripts/seedRedisRegistrations.js >/dev/null 2>&1
+}
+
+# overlap 시나리오 전용: "이미 CLASS_ID를 신청해둔 상태"를 라이브 HTTP 없이 Redis에
+# 직접 시딩한다(구현계획 Stage 1-7 3순위). reseed() 뒤에 반드시 이어서 호출해야
+# 한다 — seedRedisRegistrations.js가 방금 심어둔 CLASS_ID 슬롯을 그대로 재사용한다.
+seed_overlap_preconditions() {
+  local vus="$1"
+  $COMPOSE exec -T -e ACCOUNT_COUNT="$vus" -e CLASS_ID="$CLASS_ID" \
+    backend_1 node scripts/seedOverlapPreconditions.js >/dev/null 2>&1
 }
 
 # 큐 깊이(messages) 하나를 정수로 반환. 조회 실패 시 빈 문자열.
@@ -243,15 +252,12 @@ run_abuse_one() {
 
   log "Abuse[$scenario] / VUS=$vus / rep=$rep 시작"
   local started; started=$(date +%s)
-  # overlap 시나리오는 "CLASS_ID를 이미 신청해둔 유저"가 전제라, VUS가 정원(50)보다
-  # 크면 대부분 첫 신청부터 정원마감으로 막혀 전제 자체가 깨진다 — CLASS_ID 좌석을
-  # VUS+여유분으로 넉넉하게 override해서 첫 신청은 항상 성공하게 하고, 검증 대상인
-  # 겹침 거부(SINTER)에만 집중한다. macro는 이 문제가 없어(정원마감도 정상 패턴으로
-  # 처리하도록 이미 고쳐둠) override 없이 그대로 둔다.
+  reseed "$vus"
+  # overlap 시나리오는 "CLASS_ID를 이미 신청해둔 유저"라는 전제가 필요하다 — 이제
+  # 라이브 HTTP 등록 대신 Redis에 직접 시딩한다(구현계획 Stage 1-7 3순위). macro는
+  # 이 전제가 필요 없어 reseed()만으로 충분하다.
   if [ "$scenario" = "overlap" ]; then
-    reseed "$vus" "$((vus + 50))"
-  else
-    reseed "$vus"
+    seed_overlap_preconditions "$vus"
   fi
 
   local stdout_log="$RAW_DIR/.last-run-stdout.log"
@@ -274,13 +280,13 @@ run_abuse_one() {
   [ $exit_code -ne 0 ] && status="FAILED(exit=$exit_code)"
 
   # macro는 지표 5개(success/duplicate/full/unexpected/atomicity_violation), overlap은
-  # 3개(first_success/second_rejected/unexpected)라 열 수가 다르다 — CSV 열을 맞추려고
-  # overlap 쪽엔 빈 칸 2개를 채워 넣는다.
+  # 2개(rejected/unexpected — 3순위에서 첫 신청을 Redis 직접 시딩으로 대체하며 first_success
+  # 지표 자체가 없어짐)라 열 수가 다르다 — CSV 열을 맞추려고 overlap 쪽엔 빈 칸 3개를 채워 넣는다.
   local parsed
   if [ "$scenario" = "macro" ]; then
     parsed=$(parse_summary_counters "$summary_file" abuse_macro_success abuse_macro_duplicate_rejected abuse_macro_full_rejected abuse_macro_unexpected abuse_macro_atomicity_violation)
   else
-    parsed="$(parse_summary_counters "$summary_file" abuse_overlap_first_success abuse_overlap_second_rejected abuse_overlap_unexpected),,"
+    parsed="$(parse_summary_counters "$summary_file" abuse_overlap_rejected abuse_overlap_unexpected),,,"
   fi
 
   local drain_result drain_wait dlq_depth
@@ -302,7 +308,7 @@ run_abuse_one() {
 run_abuse() {
   ABUSE_LOG="$RAW_DIR/run-log-groupC-abuse-$(date +%Y%m%d-%H%M%S).csv"
   # macro: metric1~5 = success,duplicate_rejected,full_rejected,unexpected,atomicity_violation
-  # overlap: metric1~3 = first_success,second_rejected,unexpected (metric4/5는 빈 칸)
+  # overlap: metric1~2 = rejected,unexpected (metric3~5는 빈 칸)
   echo "scenario,vus,rep,started_at_epoch,duration_s,metric1,metric2,metric3,metric4,metric5,mysql_target_registrations,mysql_overlap_registrations,dlq_depth,drain_wait_s,status" > "$ABUSE_LOG"
   log "Group C 어뷰징 시나리오 시작 — levels=(${ABUSE_LEVELS[*]}) reps=$ABUSE_REPS"
   log "결과 로그: $ABUSE_LOG"

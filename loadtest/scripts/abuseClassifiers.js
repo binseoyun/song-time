@@ -60,20 +60,21 @@ function classifyMacroBatch(responses) {
 
 /**
  * overlap(시간표 겹침) 시나리오 판정.
- * @param {{status:number, message:string|null}} first - CLASS_ID 신청 응답
- * @param {{status:number, message:string|null}} second - OVERLAP_CLASS_ID 신청 응답
- * @returns {{ firstOk:boolean, secondRejectedByOverlap:boolean, isViolation:boolean }}
+ *
+ * 이전엔 "CLASS_ID 신청 성공"까지 k6가 라이브 HTTP로 만든 뒤 겹침 요청을 보냈는데
+ * (구현계획 Stage 1-7, 이슈 #29), 이 전제 자체가 정합성 스윕과 같은 종류의 부하를
+ * 어뷰징 시나리오 안에서 중복 발생시켰다. 이제 그 전제는 seedOverlapPreconditions.js가
+ * 라이브 HTTP 없이 Redis에 직접 시딩해두므로, k6는 겹침 요청 하나만 보내고 그 결과만
+ * 판정한다(doc/troubleshooting/05 3순위).
+ *
+ * @param {{status:number, message:string|null}} response - OVERLAP_CLASS_ID 신청 응답
+ * @returns {{ rejectedByOverlap:boolean, isViolation:boolean }}
  */
-function classifyOverlapAttempt(first, second) {
-  const firstOk = first.status === 201;
-  const secondRejectedByOverlap = second.status === 409 && second.message === OVERLAP_MESSAGE;
-  // 첫 신청이 실패하면(정원 초과 override가 실패한 경우 등) 애초에 겹침을 테스트할
-  // 전제가 안 되므로 위반으로 본다 — 이 시나리오는 항상 첫 신청이 성공하도록 좌석을
-  // 넉넉히 override하고 실행하는 게 전제(run-experiment-01-groupC.sh 참고).
+function classifyOverlapAttempt(response) {
+  const rejectedByOverlap = response.status === 409 && response.message === OVERLAP_MESSAGE;
   return {
-    firstOk,
-    secondRejectedByOverlap,
-    isViolation: !(firstOk && secondRejectedByOverlap),
+    rejectedByOverlap,
+    isViolation: !rejectedByOverlap,
   };
 }
 
