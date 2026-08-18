@@ -7,7 +7,7 @@
  * - 매 실험 회차 실행 전에 반드시 다시 실행해서 좌석/신청 내역을 초기 상태로 되돌린다.
  *
  * 실행: (docker-compose.loadtest.yml 사용법 주석 참고)
- *   docker compose -f docker-compose.yml -f docker-compose.loadtest.yml exec backend \
+ *   docker compose -f docker-compose.yml -f docker-compose.loadtest.yml exec backend_1 \
  *     node scripts/seedLoadTestAccounts.js
  *
  * 환경변수:
