@@ -69,10 +69,10 @@ if ! curl -s -u "$RABBITMQ_AUTH" "$RABBITMQ_MGMT/api/overview" >/dev/null 2>&1; 
 fi
 
 reseed() {
-  local vus="$1"
+  local vus="$1" class_seats_override="${2:-}"
   $COMPOSE exec -T -e ACCOUNT_COUNT="$vus" -e CLASS_ID="$CLASS_ID" -e OVERLAP_CLASS_ID="$OVERLAP_CLASS_ID" \
     backend node scripts/seedLoadTestAccounts.js >/dev/null 2>&1
-  $COMPOSE exec -T -e CLASS_ID="$CLASS_ID" -e OVERLAP_CLASS_ID="$OVERLAP_CLASS_ID" \
+  $COMPOSE exec -T -e CLASS_ID="$CLASS_ID" -e OVERLAP_CLASS_ID="$OVERLAP_CLASS_ID" -e CLASS_SEATS_OVERRIDE="$class_seats_override" \
     backend node scripts/seedRedisRegistrations.js >/dev/null 2>&1
 }
 
@@ -243,7 +243,16 @@ run_abuse_one() {
 
   log "Abuse[$scenario] / VUS=$vus / rep=$rep 시작"
   local started; started=$(date +%s)
-  reseed "$vus"
+  # overlap 시나리오는 "CLASS_ID를 이미 신청해둔 유저"가 전제라, VUS가 정원(50)보다
+  # 크면 대부분 첫 신청부터 정원마감으로 막혀 전제 자체가 깨진다 — CLASS_ID 좌석을
+  # VUS+여유분으로 넉넉하게 override해서 첫 신청은 항상 성공하게 하고, 검증 대상인
+  # 겹침 거부(SINTER)에만 집중한다. macro는 이 문제가 없어(정원마감도 정상 패턴으로
+  # 처리하도록 이미 고쳐둠) override 없이 그대로 둔다.
+  if [ "$scenario" = "overlap" ]; then
+    reseed "$vus" "$((vus + 50))"
+  else
+    reseed "$vus"
+  fi
 
   local stdout_log="$RAW_DIR/.last-run-stdout.log"
   $COMPOSE run --rm \
@@ -264,11 +273,14 @@ run_abuse_one() {
   local status="ok"
   [ $exit_code -ne 0 ] && status="FAILED(exit=$exit_code)"
 
+  # macro는 지표 5개(success/duplicate/full/unexpected/atomicity_violation), overlap은
+  # 3개(first_success/second_rejected/unexpected)라 열 수가 다르다 — CSV 열을 맞추려고
+  # overlap 쪽엔 빈 칸 2개를 채워 넣는다.
   local parsed
   if [ "$scenario" = "macro" ]; then
-    parsed=$(parse_summary_counters "$summary_file" abuse_macro_success abuse_macro_duplicate_rejected abuse_macro_unexpected abuse_macro_atomicity_violation)
+    parsed=$(parse_summary_counters "$summary_file" abuse_macro_success abuse_macro_duplicate_rejected abuse_macro_full_rejected abuse_macro_unexpected abuse_macro_atomicity_violation)
   else
-    parsed=$(parse_summary_counters "$summary_file" abuse_overlap_first_success abuse_overlap_second_rejected abuse_overlap_unexpected)
+    parsed="$(parse_summary_counters "$summary_file" abuse_overlap_first_success abuse_overlap_second_rejected abuse_overlap_unexpected),,"
   fi
 
   local drain_result drain_wait dlq_depth
@@ -289,7 +301,9 @@ run_abuse_one() {
 
 run_abuse() {
   ABUSE_LOG="$RAW_DIR/run-log-groupC-abuse-$(date +%Y%m%d-%H%M%S).csv"
-  echo "scenario,vus,rep,started_at_epoch,duration_s,metric1,metric2,metric3,metric4,mysql_target_registrations,mysql_overlap_registrations,dlq_depth,drain_wait_s,status" > "$ABUSE_LOG"
+  # macro: metric1~5 = success,duplicate_rejected,full_rejected,unexpected,atomicity_violation
+  # overlap: metric1~3 = first_success,second_rejected,unexpected (metric4/5는 빈 칸)
+  echo "scenario,vus,rep,started_at_epoch,duration_s,metric1,metric2,metric3,metric4,metric5,mysql_target_registrations,mysql_overlap_registrations,dlq_depth,drain_wait_s,status" > "$ABUSE_LOG"
   log "Group C 어뷰징 시나리오 시작 — levels=(${ABUSE_LEVELS[*]}) reps=$ABUSE_REPS"
   log "결과 로그: $ABUSE_LOG"
 
