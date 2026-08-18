@@ -14,7 +14,9 @@
  *     node scripts/seedRedisRegistrations.js
  *
  * 환경변수:
- *   CLASS_ID  초기화할 실험 대상 과목 id (기본 '21001083-2', seedLoadTestAccounts.js와 동일)
+ *   CLASS_ID          초기화할 실험 대상 과목 id (기본 '21001083-2', seedLoadTestAccounts.js와 동일)
+ *   OVERLAP_CLASS_ID  시간표 겹침 어뷰징 시나리오(1-6)용 두 번째 과목 id (기본 '21002144-1' —
+ *                     월/수 11:00~12:50로 CLASS_ID의 월/수 12:00~13:15와 [12:00,12:50) 구간이 겹침)
  */
 const sequelize = require('../src/config/database');
 const redis = require('../src/config/redis');
@@ -24,27 +26,36 @@ const { computeSlotIds } = require('../src/utils/scheduleSlots');
 const { classSeatsKey, classSlotsKey } = require('../src/utils/redisKeys');
 
 const CLASS_ID = process.env.CLASS_ID || '21001083-2';
+const OVERLAP_CLASS_ID = process.env.OVERLAP_CLASS_ID || '21002144-1';
+
+async function seedClass(classId) {
+  const course = await Class.findByPk(classId);
+  if (!course) {
+    throw new Error(`대상 과목(${classId})을 찾을 수 없습니다. 먼저 backend에서 seedData.js를 실행했는지 확인하세요.`);
+  }
+  const schedules = await ClassSchedule.findAll({ where: { class_id: classId } });
+
+  await redis.set(classSeatsKey(classId), course.capacity);
+  console.log(`✓ 좌석 카운터 초기화: ${classSeatsKey(classId)} = ${course.capacity}`);
+
+  const slotIds = schedules.flatMap((s) => computeSlotIds(s.weekday, s.start_time, s.end_time));
+  if (slotIds.length > 0) {
+    await redis.sadd(classSlotsKey(classId), slotIds);
+  }
+  console.log(`✓ 시간표 슬롯 등록: ${classSlotsKey(classId)} = ${slotIds.length}개 슬롯`);
+}
 
 async function main() {
   await sequelize.authenticate();
 
-  const course = await Class.findByPk(CLASS_ID);
-  if (!course) {
-    throw new Error(`대상 과목(${CLASS_ID})을 찾을 수 없습니다. 먼저 backend에서 seedData.js를 실행했는지 확인하세요.`);
-  }
-  const schedules = await ClassSchedule.findAll({ where: { class_id: CLASS_ID } });
-
   await redis.flushdb();
   console.log('✓ Redis FLUSHDB 완료');
 
-  await redis.set(classSeatsKey(CLASS_ID), course.capacity);
-  console.log(`✓ 좌석 카운터 초기화: ${classSeatsKey(CLASS_ID)} = ${course.capacity}`);
-
-  const slotIds = schedules.flatMap((s) => computeSlotIds(s.weekday, s.start_time, s.end_time));
-  if (slotIds.length > 0) {
-    await redis.sadd(classSlotsKey(CLASS_ID), slotIds);
-  }
-  console.log(`✓ 시간표 슬롯 등록: ${classSlotsKey(CLASS_ID)} = ${slotIds.length}개 슬롯`);
+  // CLASS_ID(정합성 스윕 대상)와 OVERLAP_CLASS_ID(1-6 시간표 겹침 어뷰징 시나리오 대상)를
+  // 함께 시딩한다 — 정합성 스윕만 도는 실험(0-8/1-7)에서는 OVERLAP_CLASS_ID 쪽은 그냥
+  // 아무도 건드리지 않는 여분의 과목일 뿐이라 결과에 영향이 없다.
+  await seedClass(CLASS_ID);
+  await seedClass(OVERLAP_CLASS_ID);
 
   await sequelize.close();
   redis.disconnect();
