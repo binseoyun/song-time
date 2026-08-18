@@ -63,7 +63,7 @@ grafana_link() {
 log() { echo "[$(date '+%H:%M:%S')] $*"; }
 
 # --- 사전 점검: 스택이 떠 있는지 ---
-if ! $COMPOSE ps backend 2>/dev/null | grep -q "Up"; then
+if ! $COMPOSE ps backend_1 2>/dev/null | grep -q "Up"; then
   echo "backend 컨테이너가 안 떠 있습니다. 먼저 다음을 실행하세요:"
   echo "  docker compose -f docker-compose.yml -f docker-compose.loadtest.yml up -d"
   exit 1
@@ -71,13 +71,13 @@ fi
 
 reseed() {
   local vus="$1"
-  $COMPOSE exec -T -e ACCOUNT_COUNT="$vus" -e CLASS_ID="$CLASS_ID" backend \
+  $COMPOSE exec -T -e ACCOUNT_COUNT="$vus" -e CLASS_ID="$CLASS_ID" backend_1 \
     node scripts/seedLoadTestAccounts.js >/dev/null 2>&1
 }
 
 # stdout: "<remainingSeats>,<registrationsCount>"
 final_db_state() {
-  $COMPOSE exec -T -e CLASS_ID="$CLASS_ID" backend node -e "
+  $COMPOSE exec -T -e CLASS_ID="$CLASS_ID" backend_1 node -e "
     const sequelize = require('./src/config/database');
     const Class = require('./src/models/Class');
     const Registration = require('./src/models/Registration');

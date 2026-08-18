@@ -10,7 +10,7 @@
  * 학생 등록 상태나 다른 과목 데이터가 섞여 들어갈 여지를 원천 차단한다.
  *
  * 실행: (docker-compose.loadtest.yml 사용법 주석 참고)
- *   docker compose -f docker-compose.yml -f docker-compose.loadtest.yml exec backend \
+ *   docker compose -f docker-compose.yml -f docker-compose.loadtest.yml exec backend_1 \
  *     node scripts/seedRedisRegistrations.js
  *
  * 환경변수:
