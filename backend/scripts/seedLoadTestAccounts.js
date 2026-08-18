@@ -11,10 +11,12 @@
  *     node scripts/seedLoadTestAccounts.js
  *
  * 환경변수:
- *   ACCOUNT_COUNT   생성할 계정 수 (기본 500)
- *   CLASS_ID        초기화할 실험 대상 과목 id (기본 '21001083-2', src/seedData.js 기준)
- *   OUTPUT_FILE     토큰 JSON 출력 경로 (기본 /loadtest/generated/tokens.json —
- *                   docker-compose.loadtest.yml의 볼륨 마운트와 짝을 이룬다)
+ *   ACCOUNT_COUNT     생성할 계정 수 (기본 500)
+ *   CLASS_ID          초기화할 실험 대상 과목 id (기본 '21001083-2', src/seedData.js 기준)
+ *   OVERLAP_CLASS_ID  시간표 겹침 어뷰징 시나리오(1-6)용 두 번째 과목 id (기본 '21002144-1',
+ *                     seedRedisRegistrations.js와 동일) — 재실행 시 이전 회차의 신청 내역만 정리한다
+ *   OUTPUT_FILE       토큰 JSON 출력 경로 (기본 /loadtest/generated/tokens.json —
+ *                     docker-compose.loadtest.yml의 볼륨 마운트와 짝을 이룬다)
  */
 const fs = require('fs');
 const path = require('path');
@@ -29,6 +31,7 @@ const Registration = require('../src/models/Registration');
 
 const ACCOUNT_COUNT = Number(process.env.ACCOUNT_COUNT) || 500;
 const CLASS_ID = process.env.CLASS_ID || '21001083-2';
+const OVERLAP_CLASS_ID = process.env.OVERLAP_CLASS_ID || '21002144-1';
 const OUTPUT_FILE =
   process.env.OUTPUT_FILE || path.resolve(__dirname, '../../loadtest/generated/tokens.json');
 const STUDENT_ID_PREFIX = 'loadtest';
@@ -40,19 +43,19 @@ function studentIdOf(i) {
   return `${STUDENT_ID_PREFIX}-${String(i).padStart(6, '0')}`;
 }
 
-async function resetTargetClass() {
-  const course = await Class.findByPk(CLASS_ID);
+async function resetClass(classId) {
+  const course = await Class.findByPk(classId);
   if (!course) {
     throw new Error(
-      `대상 과목(${CLASS_ID})을 찾을 수 없습니다. 먼저 backend에서 seedData.js를 실행했는지 확인하세요.`
+      `대상 과목(${classId})을 찾을 수 없습니다. 먼저 backend에서 seedData.js를 실행했는지 확인하세요.`
     );
   }
 
-  await Class.update({ remainingSeats: course.capacity }, { where: { id: CLASS_ID } });
-  const deletedCount = await Registration.destroy({ where: { class_id: CLASS_ID } });
+  await Class.update({ remainingSeats: course.capacity }, { where: { id: classId } });
+  const deletedCount = await Registration.destroy({ where: { class_id: classId } });
 
   console.log(
-    `✓ 대상 과목 초기화: ${CLASS_ID} remainingSeats=${course.capacity}, ` +
+    `✓ 대상 과목 초기화: ${classId} remainingSeats=${course.capacity}, ` +
       `기존 신청 내역 ${deletedCount}건 삭제`
   );
 }
@@ -90,7 +93,8 @@ async function seedAccounts() {
 async function main() {
   await sequelize.authenticate();
 
-  await resetTargetClass();
+  await resetClass(CLASS_ID);
+  await resetClass(OVERLAP_CLASS_ID);
   const tokens = await seedAccounts();
 
   fs.mkdirSync(path.dirname(OUTPUT_FILE), { recursive: true });
