@@ -13,10 +13,18 @@ function parseEnvInt(value, fallback) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-// 실제 값은 Stage 2-3/2-4(실험 02, Little's Law 역산)가 끝나야 확정된다.
-// 그때까지는 ADR-006 1.5가 제시한 보수적 초기값으로 시작한다.
-const ACTIVE_GATE_LIMIT = parseEnvInt(process.env.ACTIVE_GATE_LIMIT, 50);
-const ACTIVE_TTL_SECONDS = parseEnvInt(process.env.ACTIVE_TTL_SECONDS, 120);
+// 최종 확정값은 Stage 2-3/2-4(실험 02, Little's Law 역산 + Valve Tuning 실측)가
+// 끝나야 나온다. 그 전까지 쓰는 잠정값의 근거(2026-08-19 논의로 ADR-006 1.5의
+// 최초 가설값에서 조정):
+// - ACTIVE_TTL_SECONDS(600 = 10분): 원래 120초는 "과목 하나 빠르게 클릭"을
+//   가정했는데, 실제 수강신청은 한 세션에 여러 과목(정원 마감 시 대체 과목
+//   재시도 포함)을 신청하는 흐름이라 너무 짧다고 판단해 늘렸다.
+// - ACTIVE_GATE_LIMIT(300명): 여전히 감으로 정한 숫자가 아니라 Stage 1
+//   Group C 스윕 실측(`doc/experiment/01-결과-groupC.md`)에서 "동시 500명이
+//   몰려도 handled_rate 100%"였던 걸 근거로, 그보다 충분히 낮게 잡았다 —
+//   완전한 정답은 아니고 2-4가 최종 확정한다.
+const ACTIVE_GATE_LIMIT = parseEnvInt(process.env.ACTIVE_GATE_LIMIT, 300);
+const ACTIVE_TTL_SECONDS = parseEnvInt(process.env.ACTIVE_TTL_SECONDS, 600);
 const ACTIVE_TTL_MS = ACTIVE_TTL_SECONDS * 1000;
 const PROMOTION_INTERVAL_MS = parseEnvInt(process.env.PROMOTION_INTERVAL_MS, 2000);
 
@@ -44,6 +52,11 @@ async function enterQueue(userId) {
 // 승격 사이클이 끼어들어 방금 승격된 사용자를 여전히 대기 중으로 오응답하는 경쟁
 // 상태를 막는다(코드 리뷰 발견 사항, 2026-08-19). 상태 갱신(승격)은 하지 않는다 —
 // 오직 runPromotionCycle만 승격시킨다.
+//
+// 예상 대기 시간(초)은 안 준다(이슈 #48 논의, 2026-08-19) — 실제 학교 수강신청
+// 사이트도 앞에 몇 명 있는지만 보여줬고, ACTIVE_GATE_LIMIT/ACTIVE_TTL_SECONDS이
+// 아직 실측 전 플레이스홀더라 지금 시간을 계산해 보여주면 부정확한 확신을 줄
+// 위험이 있다. 순번만으로 충분하다는 판단.
 async function getQueueStatus(userId) {
   const member = String(userId);
   const now = Date.now();

@@ -1,4 +1,4 @@
-// 전역 대기열/Active 게이트(ADR-006 1.1/1.3 보완 해결, 이슈 #46) 통합 테스트.
+// 전역 대기열/Active 게이트(ADR-006 1.1/1.3 보완 해결, 이슈 #46/#48) 통합 테스트.
 // 승격 사이클(runPromotionCycle)은 실시간 타이머(TTL 120초)를 기다리지 않고, 만료된
 // Active 멤버를 Redis에 직접 심어(score를 과거로) 결정적으로 재현한다.
 // ACTIVE_GATE_LIMIT을 1로 좁혀 "슬롯이 없을 때/생겼을 때"의 경계를 쉽게 테스트한다.
@@ -48,7 +48,7 @@ describe('POST /api/queue/enter', () => {
     await request(app).post('/api/queue/enter').set('Authorization', `Bearer ${tokenB}`);
 
     const res = await request(app).post('/api/queue/enter').set('Authorization', `Bearer ${tokenA}`);
-    expect(res.body).toEqual({ state: 'waiting', rank: 1 });
+    expect(res.body).toMatchObject({ state: 'waiting', rank: 1 });
   });
 
   test('Active 상태인 사용자가 재요청하면 대기열로 돌아가지 않고 active를 반환한다', async () => {
@@ -66,6 +66,43 @@ describe('POST /api/queue/enter', () => {
   });
 });
 
+describe('GET /api/queue/status (이슈 #48, 폴링용 조회 전용 API)', () => {
+  test('토큰 없이 요청하면 401을 반환한다', async () => {
+    const res = await request(app).get('/api/queue/status');
+    expect(res.status).toBe(401);
+  });
+
+  test('대기열에 들어간 적 없으면 not_entered를 반환한다', async () => {
+    const { token } = await signupUser();
+
+    const res = await request(app).get('/api/queue/status').set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ state: 'not_entered' });
+  });
+
+  test('대기 중이면 순번을 반환한다(부작용 없이 반복 호출 가능)', async () => {
+    const { token } = await signupUser();
+    await request(app).post('/api/queue/enter').set('Authorization', `Bearer ${token}`);
+
+    const res1 = await request(app).get('/api/queue/status').set('Authorization', `Bearer ${token}`);
+    const res2 = await request(app).get('/api/queue/status').set('Authorization', `Bearer ${token}`);
+
+    expect(res1.body).toEqual({ state: 'waiting', rank: 1 });
+    expect(res2.body).toEqual(res1.body); // 반복 호출해도 상태가 안 바뀜(읽기 전용)
+  });
+
+  test('Active 상태면 만료 시각을 반환한다', async () => {
+    const { token } = await signupUser();
+    await request(app).post('/api/queue/enter').set('Authorization', `Bearer ${token}`);
+    await queueService.runPromotionCycle(); // ACTIVE_GATE_LIMIT=1이므로 바로 승격
+
+    const res = await request(app).get('/api/queue/status').set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.state).toBe('active');
+    expect(res.body.expiresAt).toBeGreaterThan(Date.now());
+  });
+});
+
 describe('대기열 순번', () => {
   test('순번은 문자열 사전순이 아니라 실제 입장 순서(시퀀스 번호)를 따른다', async () => {
     // userId '9'가 '10'보다 나중에 들어와도, ms 타임스탬프가 우연히 같아 사전순으로
@@ -74,8 +111,8 @@ describe('대기열 순번', () => {
     await queueService.enterQueue('10');
     await queueService.enterQueue('9');
 
-    expect(await queueService.getQueueStatus('10')).toEqual({ state: 'waiting', rank: 1 });
-    expect(await queueService.getQueueStatus('9')).toEqual({ state: 'waiting', rank: 2 });
+    expect(await queueService.getQueueStatus('10')).toMatchObject({ state: 'waiting', rank: 1 });
+    expect(await queueService.getQueueStatus('9')).toMatchObject({ state: 'waiting', rank: 2 });
   });
 });
 
@@ -84,7 +121,7 @@ describe('runPromotionCycle (배치 폴링 사이클)', () => {
     // userA: 이미 만료된 Active 상태를 직접 심는다 — 실시간 TTL 대기 없이 결정적으로 재현.
     await redis.zadd(ACTIVE_GATE_KEY, Date.now() - 1000, 'userA');
     const enterResult = await queueService.enterQueue('userB');
-    expect(enterResult).toEqual({ state: 'waiting', rank: 1 });
+    expect(enterResult).toMatchObject({ state: 'waiting', rank: 1 });
 
     const promoted = await queueService.runPromotionCycle();
     expect(promoted).toBe(1);
@@ -101,6 +138,6 @@ describe('runPromotionCycle (배치 폴링 사이클)', () => {
     const promoted = await queueService.runPromotionCycle();
     expect(promoted).toBe(0);
 
-    expect(await queueService.getQueueStatus('userB')).toEqual({ state: 'waiting', rank: 1 });
+    expect(await queueService.getQueueStatus('userB')).toMatchObject({ state: 'waiting', rank: 1 });
   });
 });
