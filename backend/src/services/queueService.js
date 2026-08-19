@@ -73,6 +73,14 @@ async function getQueueStatus(userId) {
   return { state: 'not_entered' };
 }
 
+// Active 슬롯 조기 반납(이슈 #58) — TTL 만료를 기다리지 않고 즉시 자리를 비운다.
+// promoteQueue의 ZREMRANGEBYSCORE는 "만료된" 멤버만 지우므로, 아직 안 끝난 TTL을 가진
+// 멤버를 지우려면 별도 ZREM이 필요하다. 이미 없는 멤버를 지워도(중복 호출, TTL로 이미
+// 빠짐) ZREM은 그냥 0을 반환할 뿐 에러가 아니므로 멱등하다.
+async function leaveActive(userId) {
+  await redis.zrem(ACTIVE_GATE_KEY, String(userId));
+}
+
 // 배치 폴링 사이클(ADR-006 1.3 보완 해결) — 만료자 제거 + 빈 슬롯만큼 승격을 원자 처리.
 // 승격된 인원 수를 반환한다(테스트/로깅용).
 async function runPromotionCycle() {
@@ -119,6 +127,7 @@ function stopPromotionScheduler() {
 module.exports = {
   enterQueue,
   getQueueStatus,
+  leaveActive,
   runPromotionCycle,
   startPromotionScheduler,
   stopPromotionScheduler,
