@@ -144,6 +144,23 @@ export function RegistrationPractice({ user, authToken, courses }: RegistrationP
     [authToken]
   );
 
+  // 탭을 벗어나면(다른 메뉴 클릭, 로그아웃 등) Active 슬롯을 즉시 반납한다(이슈 #58).
+  // 반납 API가 없으면 TTL(10분) 만료까지 자리를 붙잡아, 뒤에 대기 중인 학생이 불필요하게
+  // 오래 기다린다. keepalive: 언마운트 시점엔 컴포넌트가 이미 사라지고 있어 일반 fetch가
+  // 취소될 수 있는데, keepalive는 페이지/컴포넌트가 없어져도 요청이 전송되게 보장한다.
+  useEffect(() => {
+    return () => {
+      fetch(`${API_BASE_URL}/api/queue/active`, {
+        method: 'DELETE',
+        headers: authHeaders,
+        keepalive: true,
+      }).catch(() => {
+        // 페이지 이탈 중 실패는 조용히 무시한다 — 최악의 경우 TTL 만료로 결국 풀린다.
+      });
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const fetchMyRegistrations = async () => {
     try {
       const res = await fetch(`${API_BASE_URL}/api/registrations/redis`, { headers: authHeaders });

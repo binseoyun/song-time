@@ -6,5 +6,6 @@ const authMiddleware = require('./authMiddleware');
 
 router.post('/enter', authMiddleware, queueController.enter);
 router.get('/status', authMiddleware, queueController.status);
+router.delete('/active', authMiddleware, queueController.leave);
 
 module.exports = router;

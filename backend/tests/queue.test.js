@@ -103,6 +103,63 @@ describe('GET /api/queue/status (이슈 #48, 폴링용 조회 전용 API)', () =
   });
 });
 
+describe('DELETE /api/queue/active (이슈 #58, Active 슬롯 조기 반납)', () => {
+  test('토큰 없이 요청하면 401을 반환한다', async () => {
+    const res = await request(app).delete('/api/queue/active');
+    expect(res.status).toBe(401);
+  });
+
+  test('Active 상태에서 반납하면 즉시 not_entered로 돌아간다 (TTL을 기다리지 않음)', async () => {
+    const { token } = await signupUser();
+    await request(app).post('/api/queue/enter').set('Authorization', `Bearer ${token}`);
+    await queueService.runPromotionCycle(); // ACTIVE_GATE_LIMIT=1이므로 바로 승격
+
+    const statusBefore = await request(app).get('/api/queue/status').set('Authorization', `Bearer ${token}`);
+    expect(statusBefore.body.state).toBe('active');
+
+    const leaveRes = await request(app).delete('/api/queue/active').set('Authorization', `Bearer ${token}`);
+    expect(leaveRes.status).toBe(200);
+    expect(leaveRes.body).toEqual({ state: 'not_entered' });
+
+    const statusAfter = await request(app).get('/api/queue/status').set('Authorization', `Bearer ${token}`);
+    expect(statusAfter.body).toEqual({ state: 'not_entered' });
+  });
+
+  test('반납한 슬롯은 다음 대기자에게 즉시 승격된다', async () => {
+    const { token: tokenA } = await signupUser();
+    const { token: tokenB } = await signupUser();
+
+    await request(app).post('/api/queue/enter').set('Authorization', `Bearer ${tokenA}`);
+    await queueService.runPromotionCycle(); // ACTIVE_GATE_LIMIT=1 — A만 승격, B는 대기
+
+    await request(app).post('/api/queue/enter').set('Authorization', `Bearer ${tokenB}`);
+    const bWaiting = await request(app).get('/api/queue/status').set('Authorization', `Bearer ${tokenB}`);
+    expect(bWaiting.body.state).toBe('waiting');
+
+    await request(app).delete('/api/queue/active').set('Authorization', `Bearer ${tokenA}`);
+    const promoted = await queueService.runPromotionCycle();
+    expect(promoted).toBe(1);
+
+    const bAfter = await request(app).get('/api/queue/status').set('Authorization', `Bearer ${tokenB}`);
+    expect(bAfter.body.state).toBe('active');
+  });
+
+  test('대기 중이거나 애초에 들어간 적 없는 상태에서 반납해도 에러 없이 멱등하다', async () => {
+    const { token } = await signupUser();
+
+    const res1 = await request(app).delete('/api/queue/active').set('Authorization', `Bearer ${token}`);
+    expect(res1.status).toBe(200);
+
+    await request(app).post('/api/queue/enter').set('Authorization', `Bearer ${token}`); // 대기 중(승격 안 됨)
+    const res2 = await request(app).delete('/api/queue/active').set('Authorization', `Bearer ${token}`);
+    expect(res2.status).toBe(200);
+
+    // Active가 아니라 대기 중이었으므로 반납 호출과 무관하게 여전히 대기 중이어야 한다.
+    const statusRes = await request(app).get('/api/queue/status').set('Authorization', `Bearer ${token}`);
+    expect(statusRes.body.state).toBe('waiting');
+  });
+});
+
 describe('대기열 순번', () => {
   test('순번은 문자열 사전순이 아니라 실제 입장 순서(시퀀스 번호)를 따른다', async () => {
     // userId '9'가 '10'보다 나중에 들어와도, ms 타임스탬프가 우연히 같아 사전순으로
