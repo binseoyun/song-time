@@ -2,6 +2,7 @@
 require('./config/env');
 const app = require('./app');
 const sequelize = require('./config/database');
+const { startPromotionScheduler } = require('./services/queueService');
 
 const PORT = Number(process.env.PORT) || 8000;
 
@@ -17,6 +18,7 @@ sequelize
       console.log(`서버 실행 중! PORT: ${PORT}`);
     });
     server.timeout = SERVER_TIMEOUT_MS;
+    startPromotionScheduler();
   })
   .catch((err) => {
     console.error('DB 연결 실패:', err);
