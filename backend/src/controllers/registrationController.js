@@ -85,6 +85,24 @@ exports.cancelRedis = async (req, res) => {
   }
 };
 
+// 개설과목조회의 "여석" 표시용(이슈 #54) — Redis class:{classId}:seats를 그대로
+// 반환한다. MySQL Class.enrolled는 Group C 경로에서 갱신되지 않아 이 화면의
+// 정원 소스로 쓸 수 없다(registrationService.getSeatCounts 주석 참고).
+exports.getSeatCounts = async (req, res) => {
+  const classIds = String(req.query.classIds || '')
+    .split(',')
+    .map((id) => id.trim())
+    .filter(Boolean);
+
+  try {
+    const seats = await registrationService.getSeatCounts(classIds);
+    res.status(200).json({ seats });
+  } catch (error) {
+    console.error('여석 조회 오류:', error);
+    res.status(500).json({ message: '여석 정보를 조회하는 중 오류가 발생했습니다.' });
+  }
+};
+
 // 내 수강신청 내역 조회(이슈 #54) — "실시간 수강신청 연습" 탭의 수강신청내역 테이블용.
 exports.listMyRegistrations = async (req, res) => {
   const userId = req.user?.id;

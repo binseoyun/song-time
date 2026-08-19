@@ -130,6 +130,8 @@ export function RegistrationPractice({ user, authToken, courses }: RegistrationP
 
   const [myRegistrations, setMyRegistrations] = useState<MyRegistration[]>([]);
   const [registrationsError, setRegistrationsError] = useState<string | null>(null);
+  const [seatCounts, setSeatCounts] = useState<Record<string, number | null>>({});
+  const seatPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>('직접입력');
   const [searchTerm, setSearchTerm] = useState('');
   const [directCode, setDirectCode] = useState('');
@@ -151,6 +153,25 @@ export function RegistrationPractice({ user, authToken, courses }: RegistrationP
       setRegistrationsError(null);
     } catch (error) {
       setRegistrationsError(error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.');
+    }
+  };
+
+  // 개설과목조회의 "여석"은 MySQL Class.enrolled가 아니라 Redis
+  // class:{classId}:seats를 소스로 써야 한다 — Group C 등록/취소 경로가 MySQL
+  // enrolled 컬럼을 아예 건드리지 않기 때문(courseController.js 참고). 등록/취소 직후와
+  // 주기적으로 다시 불러온다.
+  const fetchSeatCounts = async () => {
+    if (courses.length === 0) return;
+    try {
+      const ids = courses.map((c) => c.id).join(',');
+      const res = await fetch(`${API_BASE_URL}/api/registrations/redis/seats?classIds=${encodeURIComponent(ids)}`, {
+        headers: authHeaders,
+      });
+      if (!res.ok) return;
+      const payload = await res.json();
+      setSeatCounts(payload?.seats ?? {});
+    } catch (error) {
+      console.error('여석 조회 폴링 오류:', error);
     }
   };
 
@@ -202,14 +223,17 @@ export function RegistrationPractice({ user, authToken, courses }: RegistrationP
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queue.state]);
 
-  // Active 상태 진입 시 내 신청 내역 로드 + 1초마다 남은 시간 갱신
+  // Active 상태 진입 시 내 신청 내역/여석 로드 + 1초마다 남은 시간 갱신 + 여석 폴링
   useEffect(() => {
     if (queue.state === 'active') {
       fetchMyRegistrations();
+      fetchSeatCounts();
       tickRef.current = setInterval(() => setNow(Date.now()), 1000);
+      seatPollRef.current = setInterval(fetchSeatCounts, STATUS_POLL_INTERVAL_MS);
     }
     return () => {
       if (tickRef.current) clearInterval(tickRef.current);
+      if (seatPollRef.current) clearInterval(seatPollRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queue.state]);
@@ -237,7 +261,35 @@ export function RegistrationPractice({ user, authToken, courses }: RegistrationP
         throw new Error(payload?.message || '수강신청에 실패했습니다.');
       }
       setActionMessage({ type: 'success', text: payload?.message || '수강신청이 완료되었습니다.' });
-      await fetchMyRegistrations();
+
+      // 수강신청내역은 MySQL(워커가 비동기로 반영)을 소스로 쓰므로, 신청 직후 바로
+      // 다시 불러와도 워커가 아직 못 따라와 빈 목록처럼 보일 수 있다. Redis가 이미
+      // 확정한 신청을 화면엔 먼저 낙관적으로 반영해두고, 뒤이어 authoritative한
+      // fetchMyRegistrations로 재조정한다.
+      const appliedCourse = courses.find((c) => c.id === classId);
+      if (appliedCourse) {
+        setMyRegistrations((prev) =>
+          prev.some((r) => r.classId === classId)
+            ? prev
+            : [
+                ...prev,
+                {
+                  classId,
+                  registeredAt: new Date().toISOString(),
+                  course: {
+                    id: appliedCourse.id,
+                    code: appliedCourse.code,
+                    name: appliedCourse.name,
+                    professor: appliedCourse.professor,
+                    credits: appliedCourse.credits,
+                    courseType: appliedCourse.courseType,
+                    schedules: appliedCourse.schedules ?? [],
+                  },
+                },
+              ]
+        );
+      }
+      await Promise.all([fetchMyRegistrations(), fetchSeatCounts()]);
     } catch (error) {
       setActionMessage({
         type: 'error',
@@ -261,7 +313,8 @@ export function RegistrationPractice({ user, authToken, courses }: RegistrationP
         throw new Error(payload?.message || '수강신청 취소에 실패했습니다.');
       }
       setActionMessage({ type: 'success', text: payload?.message || '수강신청이 취소되었습니다.' });
-      await fetchMyRegistrations();
+      setMyRegistrations((prev) => prev.filter((r) => r.classId !== classId));
+      await Promise.all([fetchMyRegistrations(), fetchSeatCounts()]);
     } catch (error) {
       setActionMessage({
         type: 'error',
@@ -511,8 +564,15 @@ export function RegistrationPractice({ user, authToken, courses }: RegistrationP
                   </thead>
                   <tbody>
                     {filteredCourses.map((course) => {
-                      const remaining = course.capacity - course.enrolled;
+                      // Redis(class:{id}:seats)가 Group C 등록/취소의 실시간 소스다.
+                      // 아직 시딩되지 않은 과목(null)만 MySQL capacity-enrolled로 대체한다.
+                      const redisRemaining = seatCounts[course.id];
+                      const remaining = redisRemaining === undefined || redisRemaining === null
+                        ? course.capacity - course.enrolled
+                        : redisRemaining;
+                      const enrolledDisplay = course.capacity - remaining;
                       const alreadyRegistered = myRegistrations.some((r) => r.classId === course.id);
+                      const isFull = remaining <= 0 && !alreadyRegistered;
                       return (
                         <tr key={course.id} className="border-b last:border-0">
                           <td className="py-2 pr-4">{course.name}</td>
@@ -522,15 +582,15 @@ export function RegistrationPractice({ user, authToken, courses }: RegistrationP
                           <td className="py-2 pr-4">{course.professor}</td>
                           <td className="py-2 pr-4">{course.credits}</td>
                           <td className="py-2 pr-4">{course.capacity}</td>
-                          <td className="py-2 pr-4">{course.enrolled}</td>
+                          <td className="py-2 pr-4">{enrolledDisplay}</td>
                           <td className={`py-2 pr-4 ${remaining <= 0 ? 'text-red-600' : 'text-gray-700'}`}>{remaining}</td>
                           <td className="py-2">
                             <button
                               onClick={() => applyToClass(course.id)}
-                              disabled={pendingClassId !== null || alreadyRegistered}
+                              disabled={pendingClassId !== null || alreadyRegistered || isFull}
                               className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 text-xs"
                             >
-                              {alreadyRegistered ? '신청됨' : '신청'}
+                              {alreadyRegistered ? '신청됨' : isFull ? '마감' : '신청'}
                             </button>
                           </td>
                         </tr>

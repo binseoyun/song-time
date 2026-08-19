@@ -5,6 +5,8 @@
 require('./config/env');
 const sequelize = require('./config/database');
 const Registration = require('./models/Registration');
+const redis = require('./config/redis');
+const { userRegisteredKey } = require('./utils/redisKeys');
 const { getChannel, publishToQueue, QUEUE_MAIN, QUEUE_DLQ } = require('./config/rabbitmq');
 
 // 12,000 VU 스파이크 중 DB 풀이 잠깐 꽉 차는 것은 정상적인 일시 과부하이므로,
@@ -28,6 +30,19 @@ async function persist({ userId, classId, publishedAt }) {
   if (CHAOS_TEST_DELAY_MS > 0) {
     await new Promise((resolve) => setTimeout(resolve, CHAOS_TEST_DELAY_MS));
   }
+
+  // 이 메시지가 큐에 머무는 동안 사용자가 이미 취소했을 수 있다 — 취소는 Redis
+  // user:{userId}:registered에서 즉시(동기) 지워지므로, 여기서 그 집합에 classId가
+  // 없다면 "등록 후 처리 전 취소"가 확정된 것이다. 이 경우 그대로 INSERT하면 Redis는
+  // 이미 잊은 신청을 MySQL에만 유령처럼 남기게 되고(고아 행), 이후 재신청 시도가
+  // Redis 기준으로는 정상인데 MySQL 조회 화면(수강신청내역)에는 취소된 과목이 계속
+  // 보이는 불일치로 이어진다. 그래서 INSERT 전에 Redis 기준으로 한 번 더 확인한다.
+  const stillRegistered = await redis.sismember(userRegisteredKey(userId), classId);
+  if (!stillRegistered) {
+    console.warn(`[worker] 처리 전 이미 취소된 신청 — MySQL 반영 스킵 userId=${userId} classId=${classId}`);
+    return;
+  }
+
   await Registration.create({ user_id: userId, class_id: classId });
   const leadTimeMs = Date.now() - publishedAt;
   console.log(`[worker] MySQL 반영 완료 userId=${userId} classId=${classId} leadTimeMs=${leadTimeMs}ms`);
