@@ -5,5 +5,6 @@ const queueController = require('../controllers/queueController');
 const authMiddleware = require('./authMiddleware');
 
 router.post('/enter', authMiddleware, queueController.enter);
+router.get('/status', authMiddleware, queueController.status);
 
 module.exports = router;

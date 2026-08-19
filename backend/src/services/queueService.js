@@ -26,6 +26,26 @@ const QUEUE_STATE = {
   WAITING: 2,
 };
 
+// 예상 대기 시간(초) 추정(이슈 #48). Little's Law(W = L/λ)를 대기열 자체를
+// 하위 시스템 삼아 적용한 것이다 — L(대기 인원) = rank, λ(승격 처리율) =
+// ACTIVE_GATE_LIMIT/ACTIVE_TTL_SECONDS.
+//
+// 승격이 매끄럽게 연속적으로 일어난다고 가정하면 W = (rank/LIMIT)*TTL(선형)이지만,
+// 이 시스템은 고정 TTL + 배치 폴링이라 실제로는 그렇지 않다 — 특히 이 기능이
+// 막으려는 상황(신청 오픈 순간 대량 동시 진입)에서는 같은 승격 사이클에 들어간
+// 사람들이 전부 같은 시각에 만료되어, 승격이 TTL 주기 단위로 뭉텅이(batch)로
+// 일어난다. 그래서 "rank번째까지 가려면 몇 번의 승격 배치(세대)를 거쳐야 하는가"
+// = ceil(rank/LIMIT)로 계산하고 TTL을 곱한다. 이 값은 선형 근사치보다 항상
+// 크거나 같아(ceil(x) >= x) 매끄러운 정상상태에서도 안전한 상한이고, 몰림
+// 시나리오에서는 실제 배치 타이밍과 정확히 일치한다(2026-08-19, 사용자 지적으로
+// 선형 공식이 뭉침 시나리오를 과소추정하는 문제를 발견해 수정).
+//
+// ACTIVE_GATE_LIMIT/ACTIVE_TTL_SECONDS이 아직 Stage 2-3/2-4 실측 전 플레이스홀더라
+// 이 추정치도 그 값이 실측으로 교체되면 자동으로 더 정확해진다.
+function estimateWaitSeconds(rank) {
+  return Math.ceil(rank / ACTIVE_GATE_LIMIT) * ACTIVE_TTL_SECONDS;
+}
+
 // 대기열 입장. 이미 Active/대기 중이면 기존 상태를 그대로 반환한다(새로고침 시
 // 재대기 방지 — ADR-006 1.3).
 async function enterQueue(userId) {
@@ -37,7 +57,8 @@ async function enterQueue(userId) {
   if (Number(state) === QUEUE_STATE.ACTIVE) {
     return { state: 'active', expiresAt: Number(extra) };
   }
-  return { state: 'waiting', rank: Number(extra) + 1 };
+  const rank = Number(extra) + 1;
+  return { state: 'waiting', rank, estimatedWaitSeconds: estimateWaitSeconds(rank) };
 }
 
 // 현재 상태 조회(읽기 전용). ZSCORE+ZRANK를 하나의 Lua Script로 묶어, 두 호출 사이에
@@ -55,7 +76,8 @@ async function getQueueStatus(userId) {
     return { state: 'active', expiresAt: Number(extra) };
   }
   if (stateNum === QUEUE_STATE.WAITING) {
-    return { state: 'waiting', rank: Number(extra) + 1 };
+    const rank = Number(extra) + 1;
+    return { state: 'waiting', rank, estimatedWaitSeconds: estimateWaitSeconds(rank) };
   }
   return { state: 'not_entered' };
 }
@@ -106,6 +128,7 @@ function stopPromotionScheduler() {
 module.exports = {
   enterQueue,
   getQueueStatus,
+  estimateWaitSeconds,
   runPromotionCycle,
   startPromotionScheduler,
   stopPromotionScheduler,
