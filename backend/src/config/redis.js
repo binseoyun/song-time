@@ -31,4 +31,15 @@ redis.defineCommand('cancelAtomic', {
   lua: loadLua('cancelAtomic.lua'),
 });
 
+// 대기열/Active 게이트(ADR-006 1.3 보완 해결, 이슈 #46) — redis.enterQueue(...), redis.promoteQueue(...)로 호출.
+redis.defineCommand('enterQueue', {
+  numberOfKeys: 2,
+  lua: loadLua('enterQueue.lua'),
+});
+
+redis.defineCommand('promoteQueue', {
+  numberOfKeys: 2,
+  lua: loadLua('promoteQueue.lua'),
+});
+
 module.exports = redis;

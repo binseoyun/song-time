@@ -17,3 +17,15 @@ services:
       interval: 2s
       timeout: 5s
       retries: 30
+
+  # 대기열/Active 게이트(이슈 #46) 통합 테스트용 Redis. 개발용 Redis(루트 compose, 6379)와
+  # 분리해 6380에 띄운다. 데이터는 휘발성으로 충분 — 컨테이너 내리면 사라져도 무방하다.
+  test-redis:
+    image: redis:7.4-alpine
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 5s
+      retries: 30

@@ -14,6 +14,7 @@ const aiRoutes = require('./routes/aiRoutes');
 const courseRoutes = require('./routes/courseRoutes');
 const timetableRoutes = require('./routes/timetableRoutes');
 const registrationRoutes = require('./routes/registrationRoutes');
+const queueRoutes = require('./routes/queueRoutes');
 
 const app = express();
 
@@ -41,6 +42,7 @@ app.use('/api/ai', aiRoutes);
 app.use('/api/courses', courseRoutes);
 app.use('/api/timetables', timetableRoutes);
 app.use('/api/registrations', registrationRoutes);
+app.use('/api/queue', queueRoutes);
 
 Class.hasMany(ClassSchedule, { foreignKey: 'class_id', as: 'schedules' });
 ClassSchedule.belongsTo(Class, { foreignKey: 'class_id' });
