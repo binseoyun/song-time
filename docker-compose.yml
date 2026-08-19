@@ -52,6 +52,10 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       RABBITMQ_URL: amqp://rabbitmq
+      # 실험 02 Step 3(Valve Tuning, 이슈 #57)이 라운드마다 바꿔가며 재기동한다.
+      # 미지정 시 queueService.js의 코드 기본값(300/600)과 동일하게 맞춘다.
+      ACTIVE_GATE_LIMIT: ${ACTIVE_GATE_LIMIT:-300}
+      ACTIVE_TTL_SECONDS: ${ACTIVE_TTL_SECONDS:-600}
     command: sh -c "node src/seedData.js && node src/server.js"
     depends_on:
       db:
@@ -71,6 +75,8 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       RABBITMQ_URL: amqp://rabbitmq
+      ACTIVE_GATE_LIMIT: ${ACTIVE_GATE_LIMIT:-300}
+      ACTIVE_TTL_SECONDS: ${ACTIVE_TTL_SECONDS:-600}
     command: node src/server.js
     depends_on:
       db:
