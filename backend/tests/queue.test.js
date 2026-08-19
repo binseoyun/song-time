@@ -31,14 +31,13 @@ describe('POST /api/queue/enter', () => {
     expect(res.status).toBe(401);
   });
 
-  test('최초 진입 시 대기 상태와 1번 순번, 예상 대기 시간을 반환한다', async () => {
+  test('최초 진입 시 대기 상태와 1번 순번을 반환한다', async () => {
     const { token } = await signupUser();
 
     const res = await request(app).post('/api/queue/enter').set('Authorization', `Bearer ${token}`);
 
     expect(res.status).toBe(200);
-    // ACTIVE_GATE_LIMIT=1, ACTIVE_TTL_SECONDS=120 → ceil((1/1)*120) = 120
-    expect(res.body).toEqual({ state: 'waiting', rank: 1, estimatedWaitSeconds: 120 });
+    expect(res.body).toEqual({ state: 'waiting', rank: 1 });
   });
 
   test('이미 대기 중인 사용자가 다시 요청해도 순번이 유지된다(뒤로 밀리지 않음)', async () => {
@@ -81,14 +80,14 @@ describe('GET /api/queue/status (이슈 #48, 폴링용 조회 전용 API)', () =
     expect(res.body).toEqual({ state: 'not_entered' });
   });
 
-  test('대기 중이면 순번과 예상 대기 시간을 반환한다(부작용 없이 반복 호출 가능)', async () => {
+  test('대기 중이면 순번을 반환한다(부작용 없이 반복 호출 가능)', async () => {
     const { token } = await signupUser();
     await request(app).post('/api/queue/enter').set('Authorization', `Bearer ${token}`);
 
     const res1 = await request(app).get('/api/queue/status').set('Authorization', `Bearer ${token}`);
     const res2 = await request(app).get('/api/queue/status').set('Authorization', `Bearer ${token}`);
 
-    expect(res1.body).toEqual({ state: 'waiting', rank: 1, estimatedWaitSeconds: 120 });
+    expect(res1.body).toEqual({ state: 'waiting', rank: 1 });
     expect(res2.body).toEqual(res1.body); // 반복 호출해도 상태가 안 바뀜(읽기 전용)
   });
 
@@ -101,46 +100,6 @@ describe('GET /api/queue/status (이슈 #48, 폴링용 조회 전용 API)', () =
     expect(res.status).toBe(200);
     expect(res.body.state).toBe('active');
     expect(res.body.expiresAt).toBeGreaterThan(Date.now());
-  });
-});
-
-describe('estimateWaitSeconds (Littles Law 기반 근사, 이슈 #48)', () => {
-  test('rank가 ACTIVE_GATE_LIMIT 배수 경계를 넘을 때마다 TTL만큼 늘어난다', () => {
-    // ACTIVE_GATE_LIMIT=1, ACTIVE_TTL_SECONDS=120이므로 순번 하나당 정확히 120초씩.
-    expect(queueService.estimateWaitSeconds(1)).toBe(120);
-    expect(queueService.estimateWaitSeconds(2)).toBe(240);
-    expect(queueService.estimateWaitSeconds(5)).toBe(600);
-  });
-
-  test('같은 승격 세대 안에서는 선형이 아니라 배치(TTL) 단위로 계단식으로 늘어난다', async () => {
-    // LIMIT=1로는 rank/LIMIT가 항상 정수라 선형 근사와 배치 근사가 구분이 안 된다.
-    // 이 테스트만 LIMIT=50인 별도 모듈 인스턴스로 실제 세대 경계를 재현한다 —
-    // 고정 TTL + 배치 폴링이라 같은 사이클에 승격된 사람들은 전부 같은 시각에
-    // 만료되므로, rank 1~50(첫 세대)은 전부 한 TTL(120초) 뒤, 51등(다음 세대)은
-    // 두 TTL(240초) 뒤에 승격된다 — 선형 공식이었다면 51등을 약 123초로
-    // 과소추정했을 것(사용자 지적으로 발견해 수정, 2026-08-19).
-    const originalLimit = process.env.ACTIVE_GATE_LIMIT;
-    const originalTtl = process.env.ACTIVE_TTL_SECONDS;
-    process.env.ACTIVE_GATE_LIMIT = '50';
-    process.env.ACTIVE_TTL_SECONDS = '120';
-
-    let freshQueueService;
-    let freshRedis;
-    jest.isolateModules(() => {
-      freshQueueService = require('../src/services/queueService');
-      freshRedis = require('../src/config/redis');
-    });
-
-    process.env.ACTIVE_GATE_LIMIT = originalLimit;
-    process.env.ACTIVE_TTL_SECONDS = originalTtl;
-
-    try {
-      expect(freshQueueService.estimateWaitSeconds(1)).toBe(120);
-      expect(freshQueueService.estimateWaitSeconds(50)).toBe(120);
-      expect(freshQueueService.estimateWaitSeconds(51)).toBe(240);
-    } finally {
-      await freshRedis.quit();
-    }
   });
 });
 
