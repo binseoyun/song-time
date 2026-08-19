@@ -2,16 +2,26 @@
 // 과목별 좌석 경쟁(Stage 1, registrationService.js)과는 별개 관심사다 — 이 모듈은
 // "수강신청 화면 진입 자체"를 조절할 뿐, 좌석 카운터(class:*:seats)는 건드리지 않는다.
 const redis = require('../config/redis');
-const { WAITING_QUEUE_KEY, ACTIVE_GATE_KEY } = require('../utils/redisKeys');
+const { WAITING_QUEUE_KEY, WAITING_QUEUE_SEQ_KEY, ACTIVE_GATE_KEY } = require('../utils/redisKeys');
+
+// `Number(env) || fallback`은 env가 의도적으로 '0'(예: ACTIVE_GATE_LIMIT=0으로 신규
+// 입장을 잠그는 운영 킬스위치)일 때도 fallback으로 되돌아가는 함정이 있다(코드 리뷰
+// 발견 사항, 2026-08-19) — undefined일 때만 fallback을 쓰도록 명시적으로 구분한다.
+function parseEnvInt(value, fallback) {
+  if (value === undefined || value === '') return fallback;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
 
 // 실제 값은 Stage 2-3/2-4(실험 02, Little's Law 역산)가 끝나야 확정된다.
 // 그때까지는 ADR-006 1.5가 제시한 보수적 초기값으로 시작한다.
-const ACTIVE_GATE_LIMIT = Number(process.env.ACTIVE_GATE_LIMIT) || 50;
-const ACTIVE_TTL_SECONDS = Number(process.env.ACTIVE_TTL_SECONDS) || 120;
+const ACTIVE_GATE_LIMIT = parseEnvInt(process.env.ACTIVE_GATE_LIMIT, 50);
+const ACTIVE_TTL_SECONDS = parseEnvInt(process.env.ACTIVE_TTL_SECONDS, 120);
 const ACTIVE_TTL_MS = ACTIVE_TTL_SECONDS * 1000;
-const PROMOTION_INTERVAL_MS = Number(process.env.PROMOTION_INTERVAL_MS) || 2000;
+const PROMOTION_INTERVAL_MS = parseEnvInt(process.env.PROMOTION_INTERVAL_MS, 2000);
 
 const QUEUE_STATE = {
+  NOT_ENTERED: 0,
   ACTIVE: 1,
   WAITING: 2,
 };
@@ -22,7 +32,7 @@ async function enterQueue(userId) {
   const member = String(userId);
   const now = Date.now();
 
-  const [state, extra] = await redis.enterQueue(ACTIVE_GATE_KEY, WAITING_QUEUE_KEY, member, now);
+  const [state, extra] = await redis.enterQueue(ACTIVE_GATE_KEY, WAITING_QUEUE_KEY, WAITING_QUEUE_SEQ_KEY, member, now);
 
   if (Number(state) === QUEUE_STATE.ACTIVE) {
     return { state: 'active', expiresAt: Number(extra) };
@@ -30,22 +40,23 @@ async function enterQueue(userId) {
   return { state: 'waiting', rank: Number(extra) + 1 };
 }
 
-// 현재 상태 조회(읽기 전용). 상태 갱신(승격)은 하지 않는다 — 오직 runPromotionCycle만 승격시킨다.
+// 현재 상태 조회(읽기 전용). ZSCORE+ZRANK를 하나의 Lua Script로 묶어, 두 호출 사이에
+// 승격 사이클이 끼어들어 방금 승격된 사용자를 여전히 대기 중으로 오응답하는 경쟁
+// 상태를 막는다(코드 리뷰 발견 사항, 2026-08-19). 상태 갱신(승격)은 하지 않는다 —
+// 오직 runPromotionCycle만 승격시킨다.
 async function getQueueStatus(userId) {
   const member = String(userId);
   const now = Date.now();
 
-  const activeScore = await redis.zscore(ACTIVE_GATE_KEY, member);
-  if (activeScore !== null && Number(activeScore) > now) {
-    return { state: 'active', expiresAt: Number(activeScore) };
-  }
+  const [state, extra] = await redis.queueStatus(ACTIVE_GATE_KEY, WAITING_QUEUE_KEY, member, now);
+  const stateNum = Number(state);
 
-  const waitScore = await redis.zscore(WAITING_QUEUE_KEY, member);
-  if (waitScore !== null) {
-    const rank = await redis.zrank(WAITING_QUEUE_KEY, member);
-    return { state: 'waiting', rank: rank + 1 };
+  if (stateNum === QUEUE_STATE.ACTIVE) {
+    return { state: 'active', expiresAt: Number(extra) };
   }
-
+  if (stateNum === QUEUE_STATE.WAITING) {
+    return { state: 'waiting', rank: Number(extra) + 1 };
+  }
   return { state: 'not_entered' };
 }
 
@@ -57,23 +68,38 @@ async function runPromotionCycle() {
   return Number(promoted);
 }
 
-let promotionIntervalHandle = null;
+let promotionTimeoutHandle = null;
+let promotionSchedulerRunning = false;
+
+// setInterval 대신 "이전 사이클이 끝난 뒤에만 다음 사이클을 예약"하는 방식을 쓴다 —
+// 고정 setInterval은 Redis가 느려져 한 사이클이 주기보다 오래 걸리면 다음 tick이
+// 그래도 발사돼 승격 호출이 겹쳐 쌓인다(코드 리뷰 발견 사항, 2026-08-19).
+function scheduleNextPromotion() {
+  promotionTimeoutHandle = setTimeout(async () => {
+    try {
+      await runPromotionCycle();
+    } catch (error) {
+      console.error('대기열 승격 사이클 실패:', error.message);
+    }
+    if (promotionSchedulerRunning) {
+      scheduleNextPromotion();
+    }
+  }, PROMOTION_INTERVAL_MS);
+}
 
 // server.js에서만 호출한다(app.js는 supertest가 그대로 import하므로, 여기서 타이머를
 // 시작하면 Jest 프로세스가 안 끝나거나 테스트 간 상태가 오염된다).
 function startPromotionScheduler() {
-  if (promotionIntervalHandle) return;
-  promotionIntervalHandle = setInterval(() => {
-    runPromotionCycle().catch((error) => {
-      console.error('대기열 승격 사이클 실패:', error.message);
-    });
-  }, PROMOTION_INTERVAL_MS);
+  if (promotionSchedulerRunning) return;
+  promotionSchedulerRunning = true;
+  scheduleNextPromotion();
 }
 
 function stopPromotionScheduler() {
-  if (promotionIntervalHandle) {
-    clearInterval(promotionIntervalHandle);
-    promotionIntervalHandle = null;
+  promotionSchedulerRunning = false;
+  if (promotionTimeoutHandle) {
+    clearTimeout(promotionTimeoutHandle);
+    promotionTimeoutHandle = null;
   }
 }
 

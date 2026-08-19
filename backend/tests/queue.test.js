@@ -9,13 +9,20 @@ const request = require('supertest');
 const { app, resetDatabase, closeDatabase, signupUser } = require('./helpers');
 const redis = require('../src/config/redis');
 const queueService = require('../src/services/queueService');
-const { WAITING_QUEUE_KEY, ACTIVE_GATE_KEY } = require('../src/utils/redisKeys');
+const { WAITING_QUEUE_KEY, WAITING_QUEUE_SEQ_KEY, ACTIVE_GATE_KEY } = require('../src/utils/redisKeys');
 
-afterAll(closeDatabase);
+afterAll(async () => {
+  await closeDatabase();
+  // --runInBand로 모든 테스트 파일이 한 프로세스를 공유하므로, 여기서 건드린
+  // process.env를 복원하지 않으면 이 파일 뒤에 실행되는 다른 테스트 파일이
+  // queueService를 새로 require할 때 이 값을 그대로 물려받는다(코드 리뷰 발견 사항).
+  delete process.env.ACTIVE_GATE_LIMIT;
+  delete process.env.ACTIVE_TTL_SECONDS;
+});
 
 beforeEach(async () => {
   await resetDatabase();
-  await redis.del(WAITING_QUEUE_KEY, ACTIVE_GATE_KEY);
+  await redis.del(WAITING_QUEUE_KEY, ACTIVE_GATE_KEY, WAITING_QUEUE_SEQ_KEY);
 });
 
 describe('POST /api/queue/enter', () => {
@@ -56,6 +63,19 @@ describe('POST /api/queue/enter', () => {
     expect(res.status).toBe(200);
     expect(res.body.state).toBe('active');
     expect(res.body.expiresAt).toBeGreaterThan(Date.now());
+  });
+});
+
+describe('대기열 순번', () => {
+  test('순번은 문자열 사전순이 아니라 실제 입장 순서(시퀀스 번호)를 따른다', async () => {
+    // userId '9'가 '10'보다 나중에 들어와도, ms 타임스탬프가 우연히 같아 사전순으로
+    // 비교되면(과거 버그) '10'이 앞서게 된다 — 시퀀스 카운터 기반이면 항상 입장한
+    // 순서 그대로다.
+    await queueService.enterQueue('10');
+    await queueService.enterQueue('9');
+
+    expect(await queueService.getQueueStatus('10')).toEqual({ state: 'waiting', rank: 1 });
+    expect(await queueService.getQueueStatus('9')).toEqual({ state: 'waiting', rank: 2 });
   });
 });
 
