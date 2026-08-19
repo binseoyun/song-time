@@ -30,6 +30,14 @@ Untitled
 
 # 부하테스트 시딩 산출물 (JWT 토큰 등, 매 회차 재생성됨)
 loadtest/generated/
+
+# 실험 02(Active 인원수 산정) Step 1 원본 데이터 — 재실행 가능한 원시 산출물이라 git에는 안 올림
+# (요약/해석은 doc/experiment/02-결과.md에 남김)
+doc/experiment/raw/groupC-150-*.json
+doc/experiment/raw/groupC-200-*.json
+doc/experiment/raw/groupC-250-*.json
+doc/experiment/raw/run-log-groupC-2026*.csv
+doc/experiment/raw/noisy-run-*/
 node_modules
 node_modules
 node_modules
