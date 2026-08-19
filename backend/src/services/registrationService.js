@@ -184,10 +184,42 @@ async function cancelRedisAtomic({ userId, classId }) {
   return { classId };
 }
 
+// 내 수강신청 내역 조회(이슈 #54 — "실시간 수강신청 연습" UI가 필요로 함).
+// Registration 모델 주석에 "목록 조회"가 원래 용도로 명시돼 있었는데 지금까지
+// 엔드포인트가 없었다. 좌석 카운터(Redis)는 안 건드리는 순수 조회라 그룹 구분 없이
+// 공통으로 쓴다.
+async function listMyRegistrations(userId) {
+  const registrations = await Registration.findAll({
+    where: { user_id: userId },
+    include: [{ model: Class, attributes: ['id', 'code', 'name', 'professor', 'credits', 'courseType'], include: ['schedules'] }],
+    order: [['createdAt', 'ASC']],
+  });
+
+  return registrations.map((registration) => {
+    const course = registration.Class;
+    return {
+      classId: registration.class_id,
+      registeredAt: registration.createdAt,
+      course: course
+        ? {
+            id: course.id,
+            code: course.code,
+            name: course.name,
+            professor: course.professor,
+            credits: course.credits,
+            courseType: course.courseType,
+            schedules: Array.isArray(course.schedules) ? course.schedules : [],
+          }
+        : null,
+    };
+  });
+}
+
 module.exports = {
   registerNaive,
   registerPessimistic,
   registerRedisAtomic,
   cancelRedisAtomic,
+  listMyRegistrations,
   RegistrationError,
 };

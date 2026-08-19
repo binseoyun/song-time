@@ -84,3 +84,19 @@ exports.cancelRedis = async (req, res) => {
     handleError(error, res, '수강신청 취소(Redis)');
   }
 };
+
+// 내 수강신청 내역 조회(이슈 #54) — "실시간 수강신청 연습" 탭의 수강신청내역 테이블용.
+exports.listMyRegistrations = async (req, res) => {
+  const userId = req.user?.id;
+  if (!userId) {
+    return res.status(401).json({ message: '인증이 필요합니다.' });
+  }
+
+  try {
+    const registrations = await registrationService.listMyRegistrations(userId);
+    res.status(200).json({ registrations });
+  } catch (error) {
+    console.error('수강신청 내역 조회 오류:', error);
+    res.status(500).json({ message: '수강신청 내역을 조회하는 중 오류가 발생했습니다.' });
+  }
+};

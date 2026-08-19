@@ -10,5 +10,6 @@ router.post('/naive', authMiddleware, registrationController.registerNaive);
 router.post('/pessimistic', authMiddleware, registrationController.registerPessimistic);
 router.post('/redis', authMiddleware, registrationController.registerRedis);
 router.delete('/redis/:classId', authMiddleware, registrationController.cancelRedis);
+router.get('/redis', authMiddleware, registrationController.listMyRegistrations);
 
 module.exports = router;

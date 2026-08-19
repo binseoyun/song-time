@@ -72,3 +72,60 @@ describe.each([
     expect(res.status).toBe(409);
   });
 });
+
+describe('GET /api/registrations/redis (이슈 #54, 내 수강신청 내역 조회)', () => {
+  let token;
+
+  beforeEach(async () => {
+    await resetDatabase();
+    await createClass({ id: 'C001', capacity: 30, remainingSeats: 30 });
+    ({ token } = await signupUser());
+  });
+
+  test('토큰 없이 요청하면 401을 반환한다', async () => {
+    const res = await request(app).get('/api/registrations/redis');
+    expect(res.status).toBe(401);
+  });
+
+  test('신청 내역이 없으면 빈 배열을 반환한다', async () => {
+    const res = await request(app)
+      .get('/api/registrations/redis')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ registrations: [] });
+  });
+
+  test('신청한 과목의 상세 정보를 함께 반환한다', async () => {
+    const res = await request(app)
+      .post('/api/registrations/naive')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ classId: 'C001' });
+    expect(res.status).toBe(201);
+
+    const listRes = await request(app)
+      .get('/api/registrations/redis')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(listRes.status).toBe(200);
+    expect(listRes.body.registrations).toHaveLength(1);
+    expect(listRes.body.registrations[0]).toMatchObject({
+      classId: 'C001',
+      course: { id: 'C001', name: '자료구조' },
+    });
+  });
+
+  test('다른 사용자의 신청 내역은 보이지 않는다', async () => {
+    await request(app)
+      .post('/api/registrations/naive')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ classId: 'C001' });
+
+    const { token: otherToken } = await signupUser();
+    const res = await request(app)
+      .get('/api/registrations/redis')
+      .set('Authorization', `Bearer ${otherToken}`);
+
+    expect(res.body).toEqual({ registrations: [] });
+  });
+});
