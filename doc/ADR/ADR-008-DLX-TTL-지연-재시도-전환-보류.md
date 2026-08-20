@@ -14,6 +14,14 @@
 
 즉 진짜 백오프가 없어, 수 초~수십 초 지속되는 짧은 장애조차 5번의 재시도 "기회"를 순식간에 다 써버리고 DLQ로 격리된다. 이걸 개선할지 정식으로 검토하는 것이 이 ADR의 목적이다.
 
+## 용어 정리 — 이 프로젝트의 DLQ는 DLX에 의존하지 않는다
+
+이 ADR을 읽을 때 헷갈리기 쉬운 지점이 있어 먼저 짚는다. RabbitMQ 표준 패턴에서 DLX(Dead Letter Exchange)는 브로커가 **자동으로** 두 가지 일을 해주는 기능이다 — (1) *지연 재시도*: 메시지를 TTL 있는 큐에 넣어두면 TTL 만료 시 DLX가 메인 큐로 자동 재라우팅, (2) *죽은 메시지 격리*: 워커가 메시지를 거부(`nack`, `requeue=false`)하면 DLX가 별도 DLQ로 자동 라우팅.
+
+**이 프로젝트는 이 두 가지를 브로커(DLX)가 아니라 애플리케이션 코드(`worker.js`)가 직접 한다.** `backend/src/config/rabbitmq.js` 상단 주석에 이미 명시돼 있다: "재시도는 브로커의 DLX 플러그인 설정 대신, 메시지 바디에 담긴 attempts 카운터를 worker.js가 직접 증가시켜 재발행하는 방식(애플리케이션 레벨)으로 구현한다... 큐 자체엔 DLX 설정이 없고, DLQ_QUEUE도 그냥 평범한 큐다(최종 격리소로만 쓰임)." 실제로 `worker.js`의 `handleMessage`는 실패 시 `attempts < MAX_ATTEMPTS`면 같은 큐(`registration.persist`)에 즉시 재발행하고, `attempts >= MAX_ATTEMPTS`면 `registration.persist.dlq`(RabbitMQ 설정상 `x-dead-letter-exchange` 같은 특별한 속성이 전혀 없는 평범한 durable 큐)에 명시적으로 발행한다.
+
+**따라서 이 ADR이 검토하는 건 "DLQ를 없앨지"가 아니라 "재시도와 재시도 사이에 지연(delay)을 새로 추가할지"뿐이다.** DLQ(격리소)는 이미 DLX 없이 애플리케이션 레벨로 구현돼 있고 잘 작동하며, 아래 어떤 대안을 선택하든 그대로 유지된다. A~D 대안의 차이는 오직 "실패한 메시지를 다시 메인 큐로 돌려보내기 전에 얼마나/어떻게 기다리게 할 것인가"에 있다.
+
 ## 검토한 대안과 트레이드오프
 
 | 대안 | 방식 | 장점 | 단점 |
