@@ -8,6 +8,7 @@ const Registration = require('./models/Registration');
 const redis = require('./config/redis');
 const { userRegisteredKey } = require('./utils/redisKeys');
 const { getChannel, publishToQueue, QUEUE_MAIN, QUEUE_DLQ } = require('./config/rabbitmq');
+const { returnSeatForFailedRegistration } = require('./services/registrationCompensationService');
 
 // 12,000 VU 스파이크 중 DB 풀이 잠깐 꽉 차는 것은 정상적인 일시 과부하이므로,
 // 임계값을 낮게 잡으면 이런 상황을 영구 실패로 오판해 DLQ 지표가 부풀려진다
@@ -78,6 +79,16 @@ async function handleMessage(channel, msg) {
     if (nextAttempts >= MAX_ATTEMPTS) {
       await publishToQueue(QUEUE_DLQ, { ...payload, attempts: nextAttempts, lastError: error.message });
       console.error(`[worker] DLQ로 격리 userId=${userId} classId=${classId}`);
+      // MySQL 반영을 영영 못 하게 됐으므로(재시도 소진), 이 신청이 붙잡고 있던 좌석을
+      // 돌려준다(Stage 3-4 축소판, 이슈 #62, ADR-009). DLQ 발행 자체가 이미 이 실패를
+      // 영구 기록했으므로, 반환이 실패해도(예: Redis 순간 장애) 별도 큐잉 없이 로그만
+      // 남긴다 — 재시도해봐야 같은 이유로 또 실패할 가능성이 높고, DLQ 메시지가 이미
+      // 수동 확인의 진입점이 되어준다.
+      try {
+        await returnSeatForFailedRegistration({ userId, classId });
+      } catch (compensationError) {
+        console.error(`[worker] 좌석 반환 실패 — 수동 확인 필요 userId=${userId} classId=${classId}:`, compensationError.message);
+      }
     } else {
       await publishToQueue(QUEUE_MAIN, { ...payload, attempts: nextAttempts });
     }
