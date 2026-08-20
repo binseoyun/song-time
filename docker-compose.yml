@@ -52,6 +52,10 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       RABBITMQ_URL: amqp://rabbitmq
+      # 실험 02 Step 3(Valve Tuning, 이슈 #57)이 라운드마다 바꿔가며 재기동한다.
+      # 미지정 시 queueService.js의 코드 기본값(300/600)과 동일하게 맞춘다.
+      ACTIVE_GATE_LIMIT: ${ACTIVE_GATE_LIMIT:-300}
+      ACTIVE_TTL_SECONDS: ${ACTIVE_TTL_SECONDS:-600}
     command: sh -c "node src/seedData.js && node src/server.js"
     depends_on:
       db:
@@ -71,6 +75,59 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       RABBITMQ_URL: amqp://rabbitmq
+      ACTIVE_GATE_LIMIT: ${ACTIVE_GATE_LIMIT:-300}
+      ACTIVE_TTL_SECONDS: ${ACTIVE_TTL_SECONDS:-600}
+    command: node src/server.js
+    depends_on:
+      db:
+        condition: service_healthy
+      backend_1:
+        condition: service_started
+    restart: unless-stopped
+
+  # backend_3/backend_4: 이슈 #57 Round 1(VUS=12,000)에서 backend_1/backend_2가 각각
+  # CPU 110~116%(프로세스당 천장)로 포화됐는데도 VM 전체 CPU는 최대 83%로 여유가
+  # 있었음을 확인 — 대기열 폴링 총량을 받아낼 처리 용량을 인스턴스 추가로 넓혀
+  # 이 가설을 검증한다. backend_2와 동일하게 seedData.js는 실행하지 않는다
+  # (findOrCreate 기반이라 동시 실행 시 레이스 위험 — backend_1만 시딩 전담).
+  backend_3:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file:
+      - .env.docker
+    environment:
+      DB_HOST: db
+      DB_PORT: 3306
+      AI_SERVER_URL: http://ai-server:5000
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      RABBITMQ_URL: amqp://rabbitmq
+      ACTIVE_GATE_LIMIT: ${ACTIVE_GATE_LIMIT:-300}
+      ACTIVE_TTL_SECONDS: ${ACTIVE_TTL_SECONDS:-600}
+    command: node src/server.js
+    depends_on:
+      db:
+        condition: service_healthy
+      backend_1:
+        condition: service_started
+    restart: unless-stopped
+
+  backend_4:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file:
+      - .env.docker
+    environment:
+      DB_HOST: db
+      DB_PORT: 3306
+      AI_SERVER_URL: http://ai-server:5000
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      RABBITMQ_URL: amqp://rabbitmq
+      ACTIVE_GATE_LIMIT: ${ACTIVE_GATE_LIMIT:-300}
+      ACTIVE_TTL_SECONDS: ${ACTIVE_TTL_SECONDS:-600}
     command: node src/server.js
     depends_on:
       db:
@@ -175,6 +232,8 @@ services:
       - frontend
       - backend_1
       - backend_2
+      - backend_3
+      - backend_4
       - ai-server
     ports:
       - "8090:80"
