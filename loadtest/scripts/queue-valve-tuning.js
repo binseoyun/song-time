@@ -60,9 +60,27 @@ const registered = new Counter('registration_success');
 const rejectedByBusiness = new Counter('registration_rejected');
 const rejectedByServer = new Counter('registration_server_error');
 const queueDropout = new Counter('queue_dropout'); // MAX_WAIT_S 초과로 포기
+// 연결 타임아웃 등으로 응답 자체를 못 받은 요청 — 대기열 자체 오버헤드(DV)와 별개로,
+// "그냥 실패해서 재시도한" 횟수를 추적한다(계획서 §5 DV "에러율"과는 다른 지표).
+const queueRequestError = new Counter('queue_request_error');
 
 function randomBetween(min, max) {
   return min + Math.random() * (max - min);
+}
+
+// res.json()은 연결 실패 등으로 바디가 없으면 예외를 던진다(k6 GoError) — VU 전체가
+// 크래시하는 대신, 실패를 카운터로 남기고 null을 반환해 호출부가 재시도하게 한다.
+function safeState(res) {
+  if (!res || res.status === 0 || !res.body) {
+    queueRequestError.add(1);
+    return null;
+  }
+  try {
+    return res.json('state');
+  } catch (error) {
+    queueRequestError.add(1);
+    return null;
+  }
 }
 
 export default function () {
@@ -74,7 +92,7 @@ export default function () {
   queueEnterDuration.add(enterRes.timings.duration);
   check(enterRes, { 'enter: 200': (r) => r.status === 200 });
 
-  let state = enterRes.json('state');
+  let state = safeState(enterRes);
   const waitStart = Date.now();
 
   while (state !== 'active') {
@@ -88,12 +106,14 @@ export default function () {
     queueStatusDuration.add(statusRes.timings.duration);
     check(statusRes, { 'status: 200': (r) => r.status === 200 });
 
-    state = statusRes.json('state');
+    state = safeState(statusRes);
+    // 응답을 아예 못 받았으면(타임아웃 등) 상태를 모르는 것뿐이니 다음 폴링에서 재시도한다.
+    if (state === null) continue;
     // TTL 만료로 대기열에서 밀려났으면(프론트와 동일하게) 재진입한다.
     if (state === 'not_entered') {
       const reenterRes = http.post(`${TARGET_BASE_URL}/api/queue/enter`, null, { headers, tags: { name: 'queue_enter' } });
       queueEnterDuration.add(reenterRes.timings.duration);
-      state = reenterRes.json('state');
+      state = safeState(reenterRes);
     }
   }
 
