@@ -23,7 +23,7 @@
 - [ ] **로드맵 외 작업(예정)**: AI 에이전트 챗봇(RAG + Function Calling) — 기존 단발성 추천(`/recommend`)을 강의계획서 기반 근거 응답 + 실제 수강신청 보조까지 가능한 대화형 상담 에이전트로 확장하는 것. 새 기능이므로 위와 같은 원칙으로 **로드맵 외 작업**으로 분류한다.
   - 설계 검토: [이슈 #51](https://github.com/binseoyun/song-time/issues/51) — Vector DB 선택(Chroma vs pgvector), 착수 시점 등 일부 결정 미확정 상태로 파킹만 해둠.
   - 착수 순서: 실시간 수강신청 Stage 2 나머지(2-3~2-6) 완료 후 착수. Stage 3(운영 고도화) 완료를 기다리지 않는다 — Stage 3는 기능 완결과 무관한 장애 대응력 항목이라 선행조건이 아님(2026-08-19 결정).
-  - 착수 시 `ADR-009`(ADR-007은 backend 수평 확장, ADR-008은 DLX+TTL 보류 결정에 각각 2026-08-20 사용됨) + `doc/AI-에이전트-구현계획.md`(Stage 기반)를 작성한다.
+  - 착수 시 `ADR-010`(ADR-007 backend 수평 확장, ADR-008 DLX+TTL 보류, ADR-009 DLQ 보상/Circuit Breaker 범위 재평가 — 전부 2026-08-20 사용됨) + `doc/AI-에이전트-구현계획.md`(Stage 기반)를 작성한다.
 - [x] Phase 2. 동시성 개선 (진행 중) — 기존 `courseController.js`의 정원 초과 방지 로직 부재 문제(로드맵 P1)를 다룬다. 위 실시간 수강신청 신규 기능과는 별개 트랙.
   - [x] Group A(무방비)/B(비관적 락) API 구현 (#9, 2026-08-10)
   - [x] k6+Prometheus+Grafana 부하테스트 인프라 + 계정 시딩 스크립트 (#13, 2026-08-11)
