@@ -85,6 +85,57 @@ services:
         condition: service_started
     restart: unless-stopped
 
+  # backend_3/backend_4: 이슈 #57 Round 1(VUS=12,000)에서 backend_1/backend_2가 각각
+  # CPU 110~116%(프로세스당 천장)로 포화됐는데도 VM 전체 CPU는 최대 83%로 여유가
+  # 있었음을 확인 — 대기열 폴링 총량을 받아낼 처리 용량을 인스턴스 추가로 넓혀
+  # 이 가설을 검증한다. backend_2와 동일하게 seedData.js는 실행하지 않는다
+  # (findOrCreate 기반이라 동시 실행 시 레이스 위험 — backend_1만 시딩 전담).
+  backend_3:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file:
+      - .env.docker
+    environment:
+      DB_HOST: db
+      DB_PORT: 3306
+      AI_SERVER_URL: http://ai-server:5000
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      RABBITMQ_URL: amqp://rabbitmq
+      ACTIVE_GATE_LIMIT: ${ACTIVE_GATE_LIMIT:-300}
+      ACTIVE_TTL_SECONDS: ${ACTIVE_TTL_SECONDS:-600}
+    command: node src/server.js
+    depends_on:
+      db:
+        condition: service_healthy
+      backend_1:
+        condition: service_started
+    restart: unless-stopped
+
+  backend_4:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file:
+      - .env.docker
+    environment:
+      DB_HOST: db
+      DB_PORT: 3306
+      AI_SERVER_URL: http://ai-server:5000
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      RABBITMQ_URL: amqp://rabbitmq
+      ACTIVE_GATE_LIMIT: ${ACTIVE_GATE_LIMIT:-300}
+      ACTIVE_TTL_SECONDS: ${ACTIVE_TTL_SECONDS:-600}
+    command: node src/server.js
+    depends_on:
+      db:
+        condition: service_healthy
+      backend_1:
+        condition: service_started
+    restart: unless-stopped
+
   # Group C(Redis 원자적 연산)의 좌석/신청/시간표 카운터. AOF/RDB 영속화는 끈다 —
   # 지금 계획된 카오스 시나리오는 워커/API 서버 kill이지 Redis 재시작이 아니고,
   # 재시작 시 데이터는 seedRedisRegistrations.js로 다시 채운다
@@ -181,6 +232,8 @@ services:
       - frontend
       - backend_1
       - backend_2
+      - backend_3
+      - backend_4
       - ai-server
     ports:
       - "8090:80"
