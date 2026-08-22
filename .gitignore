@@ -1,6 +1,7 @@
 # 민감 정보
 .env
 .env.docker
+.env.chat.docker
 **/backend/.env
 **/backend/ai-server/.env 
 
