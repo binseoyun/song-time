@@ -16,6 +16,26 @@ exports.getCourses = async (req, res) => {
   }
 };
 
+exports.getCourseByCode = async (req, res) => {
+  try {
+    const { code } = req.params;
+
+    const course = await Class.findOne({
+      where: { code },
+      include: [{ model: ClassSchedule, as: 'schedules' }],
+    });
+
+    if (!course) {
+      return res.status(404).json({ message: '해당 과목 코드를 찾을 수 없습니다.' });
+    }
+
+    res.status(200).json(course);
+  } catch (error) {
+    console.error('과목 단건 조회 오류:', error);
+    res.status(500).json({ message: '서버 오류가 발생했습니다.' });
+  }
+};
+
 exports.getMyInterests = async (req, res) => {
   try {
     const userId = req.user?.id;

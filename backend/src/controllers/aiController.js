@@ -6,6 +6,59 @@ const ClassSchedule = require('../models/ClassSchedule'); // ✅ 1. ClassSchedul
 // 도커 환경이면 보통 http://ai-server:5000 으로 통신
 const AI_SERVER_URL = process.env.AI_SERVER_URL || 'http://localhost:5000';
 
+// AI 챗봇 프록시(ADR-010 §3/§11) — Node은 authMiddleware로 인증만 하고, 실제 대화
+// 상태(Redis/MySQL)와 Tool 호출 루프는 전부 ai-server가 직접 소유·처리한다.
+// req.user.id를 x-user-id 신뢰 헤더에 실어 그대로 전달한다 — ai-server 포트가
+// 외부에 노출되지 않는다는 전제(§11) 하에 이 헤더를 신뢰할 수 있다.
+exports.chat = async (req, res) => {
+  try {
+    const response = await axios.post(`${AI_SERVER_URL}/api/ai/chat`, req.body, {
+      headers: { 'x-user-id': String(req.user.id) },
+    });
+    res.status(200).json(response.data);
+  } catch (error) {
+    const detail = error.response?.data || error.message;
+    console.error('AI 챗봇 통신 에러:', detail);
+    res.status(error.response?.status || 500).json({
+      message: 'AI 챗봇과 통신 중 오류가 발생했습니다.',
+      detail,
+    });
+  }
+};
+
+exports.getSessions = async (req, res) => {
+  try {
+    const response = await axios.get(`${AI_SERVER_URL}/api/ai/sessions`, {
+      headers: { 'x-user-id': String(req.user.id) },
+    });
+    res.status(200).json(response.data);
+  } catch (error) {
+    const detail = error.response?.data || error.message;
+    console.error('AI 챗봇 세션 목록 조회 에러:', detail);
+    res.status(error.response?.status || 500).json({
+      message: '세션 목록을 불러오는 중 오류가 발생했습니다.',
+      detail,
+    });
+  }
+};
+
+exports.getSessionMessages = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const response = await axios.get(`${AI_SERVER_URL}/api/ai/sessions/${id}/messages`, {
+      headers: { 'x-user-id': String(req.user.id) },
+    });
+    res.status(200).json(response.data);
+  } catch (error) {
+    const detail = error.response?.data || error.message;
+    console.error('AI 챗봇 세션 메시지 조회 에러:', detail);
+    res.status(error.response?.status || 500).json({
+      message: '대화 기록을 불러오는 중 오류가 발생했습니다.',
+      detail,
+    });
+  }
+};
+
 exports.getRecommendation = async (req, res) => {
   try {
     const { jobInterest, major } = req.body;
