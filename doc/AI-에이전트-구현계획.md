@@ -33,8 +33,8 @@
 
 목표: 강의계획서 의미 검색을 실제로 붙인다. ADR-010 §4/§5/§6/§13 반영.
 
-- [ ] 1-1. 제공받은 PDF 샘플로 실제 구조 확인(주차별 계획이 표인지 텍스트인지 등) → 청킹 규칙 확정(ADR-010 §13 열린 사항을 여기서 닫음)
-- [ ] 1-2. `pdfplumber` 파싱 파이프라인 + `gemini-embedding-001` 임베딩 + Chroma 적재 스크립트(로컬 1회성 실행, 관리자 UI는 스코프 아웃)
+- [ ] 1-1. 제공받은 PDF 샘플로 실제 구조 확인(주차별 계획이 표인지 텍스트인지 등) → 청킹 규칙 확정(ADR-010 §13 열린 사항을 여기서 닫음). 청크를 읽는 김에 eval용 (질문, 정답 청크) 쌍을 수동으로 함께 작성(ADR-010 §14 "eval 정답 라벨링 방법론") — 검수 부담이 크면 LLM 보조 생성으로 전환
+- [ ] 1-2. `pdfplumber` 파싱 파이프라인 + `gemini-embedding-001` 임베딩 + Chroma 적재 스크립트 — 완전 수동 실행(관리자 UI 없음), 실행 시 기존 collection 전체 삭제 후 재생성(wipe-and-reload), 재적재 전 `ai-server` 컨테이너 정지 필요(동시 파일 락 충돌 방지) (ADR-010 §4 "재적재 운영 방식")
 - [ ] 1-3. RAG 검색을 0-5의 `AgentExecutor`에 세 번째 Tool로 결합(별도 경로 아님, ADR-010 §12 재검토) — "이런 걸 배우고 싶은데 관련 과목 있어?" 같은 의미 기반 질문 처리. description에 "정확한 값 질문(잔여석 등)에는 쓰지 않는다"는 부정형 지시 포함(ADR-010 §8 Tool 설계 원칙)
 - [ ] 1-4. RAG 검색 hit rate 측정(정답 청크가 top-k 안에 들어오는 비율) — `doc/experiment/`에 원본 저장
 
@@ -51,8 +51,9 @@
 
 - [ ] 3-0. Node에 사용자 단위 rate limit 미들웨어 구현(기존 Group C `redis` 사용, `redis-chat`은 `ai-server` 전용이라 안 씀 — 구조는 ADR-010 §15 확정, 윈도우 길이·허용 횟수는 실측 후 확정)
 - [ ] 3-1. 범위 밖 질문 거절(수강신청과 무관한 질문에 대한 응답 정책)
-- [ ] 3-2. Gemini API 장애 시 폴백(에러 메시지 vs 재시도 vs 기존 `/recommend` 방식으로 다운그레이드)
+- [ ] 3-2. Gemini API 장애 시 폴백(에러 메시지 vs 재시도) — `/recommend`는 3-4에서 제거 대상이라 다운그레이드 경로로 쓰지 않는다(ADR-010 §17 "완전 대체" 결정)
 - [ ] 3-3. 최종 측정: Tool 선택 정확도 재측정, 할루시네이션 비율(수작업 샘플링), E2E p95 latency, Gemini 토큰 비용 — Stage 0/1 결과와 비교해 "가드레일 전/후" Before/After로 정리(ADR-010 §14)
+- [ ] 3-4. `/recommend` 제거 — 새 챗봇이 3-3 측정까지 끝나 안정성이 검증된 뒤, 프론트 `AIRecommendation.tsx`(및 진입 탭), `backend/src/routes/aiRoutes.js`·`aiController.js`의 `/recommend` 경로, `backend/ai-server/main.py`의 `/recommend` 엔드포인트를 삭제(ADR-010 §17 "완전 대체" 결정)
 
 ## 완료 조건
 
