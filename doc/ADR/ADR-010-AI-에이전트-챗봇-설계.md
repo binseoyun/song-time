@@ -30,7 +30,9 @@
 ### 결정과 이유
 **A(Python, 기존 `ai-server` 확장)를 채택한다.** Chroma/PDF 파싱 생태계 우위가 결정적이고, 새 컨테이너를 안 늘리는 게 이 프로젝트가 일관되게 지켜온 원칙(ADR-009: Circuit Breaker 보류 이유도 결국 "복잡도 대비 이 프로젝트 규모에서 정당화 안 됨")과 맞는다.
 
-## 3. 상태 소유 경계 — Python은 오케스트레이션만, 상태는 Node가 소유
+**후속 결정과의 관계 (2026-08-21).** 이 §2는 "어떤 프로세스/언어에 코드를 둘 것인가"만 다룬다. `ai-server`가 이후 자기 상태(Redis·MySQL)까지 직접 소유하는 완전히 독립된 서비스로 확장되는 결정은 §3에서 다룬다.
+
+## 3. 상태 소유 경계 — Python(`ai-server`)이 자기 도메인 상태를 직접 소유 (2026-08-21 재검토, 최종)
 
 ### 상황
 `ai-server`가 Python으로 결정됐는데, 대화 상태(최근 대화 메모리 Redis, 영구 히스토리 MySQL `chat_sessions`/`chat_messages`)를 어디가 관리할지가 남는다. 확인해보니 `ai-server`는 지금까지 완전히 **stateless**했다(`/recommend`, `/api/schedule` 둘 다 상태 없음, `requirements.txt`의 `sqlalchemy`/`mysql-connector-python`은 실제로는 어디서도 쓰이지 않는 죽은 의존성이었다 — `scheduler.py`는 `mock_db.py`의 목 데이터만 쓴다).
@@ -42,8 +44,23 @@
 | **A. Python이 Redis/MySQL에 직접 연결** | 구현이 한 프로세스 안에서 끝남 | 이 프로젝트 전체가 "Node backend = 모든 상태의 단일 진실"(대기열 Redis, Registration MySQL 등)이라는 원칙을 지켜왔는데 여기서 처음으로 깨짐. 같은 스키마에 Node/Python 두 클라이언트가 각자 연결하면 스키마 변경 시 양쪽 다 맞춰야 하는 유지보수 부담 발생 |
 | **B. Python은 오케스트레이션만, 상태 읽기/쓰기는 Node 내부 API 경유** | 기존 원칙 유지. Tool 실행(예: `GET /api/courses`)도 이미 Node API를 호출하는 구조라서(이슈 #51), 상태 저장도 같은 패턴이면 아키텍처가 일관됨 | Python→Node 내부 HTTP 호출이 한 홉 늘어남(대화 응답 스트리밍 자체엔 영향 없음 — SSE는 Python이 Gemini와 직접 주고받고, 상태 저장은 응답 완료 후 비동기로 기록) |
 
-### 결정과 이유
-**B를 채택한다.** "상태는 Node가 소유"라는 이 프로젝트의 일관된 원칙(Redis 대기열, MySQL Registration 전부 이 원칙을 따름)을 깨지 않는 게, 향후 스키마 변경/디버깅 비용을 줄이는 데 더 중요하다고 판단했다. 구체적으로 Node backend에 `POST /api/ai/sessions/:id/messages`(내부 전용, `cronAuthMiddleware`류가 아니라 서비스 간 인증 — 상세는 구현 시 확정) 같은 내부 API를 추가하고, Python은 이걸 호출해 대화 기록을 남긴다.
+### 결정과 이유 (최초, 2026-08-20)
+**B를 채택한다.** "상태는 Node가 소유"라는 이 프로젝트의 일관된 원칙(Redis 대기열, MySQL Registration 전부 이 원칙을 따름)을 깨지 않는 게, 향후 스키마 변경/디버깅 비용을 줄이는 데 더 중요하다고 판단했다. 구체적으로 Node backend에 `POST /api/ai/sessions/:id/messages`(내부 전용) 같은 내부 API를 추가하고, Python은 이걸 호출해 대화 기록을 남긴다. 서비스 간 인증은 기존 `cronAuthMiddleware`(`backend/src/routes/cronAuthMiddleware.js`)와 같은 공유 시크릿 헤더 패턴을 재사용한다(예: `x-ai-server-secret`).
+
+### 재검토 (2026-08-21) — MSA 설계를 끝까지 밀어붙이면
+
+착수 논의 중 "이 프로젝트가 실제로 MSA 4원칙(독립 배포·비즈니스 중심 분리·기술 다양성·**분산 데이터**·느슨한 결합)을 따를 거라면, Redis만 물리적으로 나누고(§10) 소유권은 여전히 Node가 갖는 지금 그림이 앞뒤가 안 맞는다"는 지적이 나왔다. 다시 보니 맞는 지적이다.
+
+- "분산 데이터 — 각 서비스가 자체 데이터베이스를 소유"는 인스턴스가 물리적으로 나뉘어 있다는 뜻이 아니라, **그 도메인을 대표하는 서비스가 직접 연결해서 소유한다**는 뜻이다. B안(Node가 상태 소유, Python은 내부 API 경유)은 인스턴스를 나눠도 소유권은 계속 Node에 남는 절충안이라, 이 기준을 만족 못 한다.
+- 애초에 B안을 택한 이유("상태는 Node가 소유"라는 기존 원칙 유지)는 DDD 관점의 근거가 아니라 "일관성 유지"였다. 그런데 AI 상담 도메인은 실시간 수강신청 도메인과 바운디드 컨텍스트가 명확히 다르고(§10 Redis 분리 결정에서 이미 확인함), `chat_sessions`/`chat_messages`는 Node의 다른 테이블과 FK로 얽힐 이유가 없다(사용자 ID는 정수 값으로만 참조, DB 레벨 FK 없음) — 분리해도 잃을 게 없다.
+- Tool 실행(잔여석·과목 조회)은 계속 Node의 공개 API를 호출한다 — 이건 "다른 도메인 데이터를 API로 읽는" 정상적인 cross-service 호출이라 "느슨한 결합" 원칙에 그대로 부합하고, 바뀔 이유가 없다.
+
+### 최종 결정
+**`ai-server`가 채팅 도메인의 상태(작업 메모리 Redis + 영구 히스토리 MySQL)를 직접 소유하고 직접 연결한다.** Node의 내부 API(`POST /api/ai/sessions/:id/messages`)와 그 서비스 인증(`x-ai-server-secret`)은 더 이상 필요 없어 폐기한다 — Python이 자기 도메인 상태를 쓰는데 남의 서비스 API를 거칠 이유가 없다. 구체적인 저장소 구성은 §10에서 다룬다.
+
+**Node의 역할은 두 가지로 좁아진다**: (1) `/api/ai/chat` 요청에 대한 게이트웨이(JWT 인증 + rate limit, §11/§15 — 인증 후 `x-user-id`를 신뢰 헤더로 붙여 `ai-server`에 프록시), (2) 잔여석·과목 조회용 공개 API 제공자(Tool 대상, §8). 둘 다 상태 소유와는 무관한 역할이라 이 결정과 충돌하지 않는다.
+
+`x-user-id` 헤더를 `ai-server`가 그대로 신뢰해도 되는 이유는 네트워크 토폴로지가 보장한다 — `ai-server`는 호스트에 직접 노출되지 않으므로(§11, `ports` 제거) Docker 내부망을 거쳐 Node를 통과한 요청만 도달할 수 있고, 이 헤더는 항상 Node가 `authMiddleware`로 인증을 마친 뒤에만 붙는다. (Phase 3 K8s 이전 시에는 NetworkPolicy 등으로 이 경계를 다시 보장해야 한다 — 지금은 로컬 docker-compose 네트워크 격리로 충분하다.)
 
 ## 4. Vector DB 결정 — Chroma
 
@@ -55,7 +72,7 @@ Pinecone/Chroma/Weaviate/Milvus/Faiss/Qdrant/pgvector/Elasticsearch/pgvecto.rs 9
 
 **AWS(S3 Vectors, Aurora+pgvector)도 검토했으나 지금은 채택하지 않는다.** 비용 자체는 이 규모에서 무시할 수준(S3 Vectors 1천만 벡터·월 100만 쿼리 기준 월 $11.38, Aurora+pgvector 프리 티어 존재)이지만, 로드맵의 "AWS 실배포"는 아직 착수 전인 후반부 단계다. 지금 벡터 DB만 AWS로 가져가면 이 프로젝트가 지금까지 지켜온 "로컬 `docker-compose`로 완결" 원칙이 깨지고, 아직 시작 안 한 Phase를 부분적으로 앞당기는 셈이 된다(K8s Phase 3 관련 항목들을 전부 보류한 것과 같은 논리, ADR-007 참고). **재검토 조건**: 로드맵의 AWS 실배포 단계에 실제로 도달하면, 그때 Chroma→S3 Vectors(또는 Aurora+pgvector) 마이그레이션을 검토한다 — Before/After 비용·지연 수치까지 남기면 포트폴리오 서사로도 유효하다.
 
-## 5. 임베딩 모델 결정 — Gemini `gemini-embedding-001`
+## 5. 임베딩 모델 결정 — Gemini `gemini-embedding-001`  
 
 ### 상황
 청킹된 강의계획서 텍스트를 벡터로 바꿀 임베딩 모델이 필요하다.
@@ -95,11 +112,17 @@ Pinecone/Chroma/Weaviate/Milvus/Faiss/Qdrant/pgvector/Elasticsearch/pgvecto.rs 9
 | Tool | 대상 API | 신설 여부 |
 |---|---|---|
 | 잔여석 조회 | `GET /api/courses` | 기존 |
-| 대기열 순번 조회 | `GET /api/queue/status` | 기존 |
 | 과목 단건 조회 | `GET /api/courses/:code` | **신설** — 현재 없음, 매번 전체 리스트를 프론트가 필터링하는 구조라 Tool 입장에서 비효율 |
 | 강의계획서 의미 검색 | (신규) Chroma 쿼리 | 신설 |
 
 모든 Tool이 read-only다(§9 참고 — write Tool은 설계에서 배제했다).
+
+**대기열 순번 조회는 Tool 인벤토리에서 제외한다.** 원래 후보였으나, "실시간 수강신청 연습"이라는 이 앱의 핵심 가치(§9와 같은 논리 — 학생이 직접 화면에서 확인·행동하는 연습)와, 에이전트가 대신 알려주면 그 확인 행위 자체를 대체해버린다는 점에서 배제한다. 대기열 순번은 항상 사용자가 UI에서 직접 확인하도록 유도한다. 부수 효과로, 남은 Tool 3개(잔여석 조회·과목 단건 조회·RAG 검색)는 전부 사용자와 무관하게 같은 답을 반환하는 공개 데이터라서, "Tool 호출 시 이 요청이 누구 대신 실행되는지"를 Python→Node 경로에 전파해야 하는 문제 자체가 사라진다 — 이 문제가 여전히 남는 건 §11의 `/api/ai/chat` 엔드포인트 자체의 로그인 요구 여부이지, 개별 Tool 호출이 아니다.
+
+### Tool 설계 원칙
+
+- **민감정보를 Tool 파라미터로 노출하지 않는다.** Function Calling의 기본 구조상 LLM은 호출에 필요한 JSON(함수명+파라미터)만 생성하고, 실제 실행은 애플리케이션 코드가 담당한다 — 이 경계를 이용해 사용자 식별자·인증 토큰처럼 민감한 값은 LLM이 채우는 파라미터에 절대 포함시키지 않고, Tool을 실제로 실행하는 코드가 세션 컨텍스트에서 직접 주입한다. 지금 남은 Tool 3개(잔여석 조회·과목 단건 조회·RAG 검색)는 파라미터가 전부 공개 데이터(과목 코드, 검색어)라 이미 이 원칙에 부합한다 — 대기열 Tool을 제외한 결정이 결과적으로 사용자 식별자가 필요했던 유일한 후보를 먼저 없앤 셈이다. §11의 `x-user-id` 신뢰 헤더도 같은 이유로 LLM이 아니라 Node→`ai-server` 요청 경로의 애플리케이션 코드가 직접 주고받는다(§3 최종 결정). 앞으로 Tool을 추가할 때도 이 원칙을 기준으로 판단한다.
+- **RAG Tool의 description은 "언제 쓰지 않는지"까지 명시한다.** §7에서 짚은 할루시네이션 리스크(정답이 하나뿐인 질문에 RAG가 잘못 답하는 것)는 Tool description이 모호할 때 실제로 발생한다 — description 하나로 모델이 Tool을 잘못 고르거나 필요한데 안 고를 수 있기 때문이다. RAG 검색 Tool의 description에는 "강의계획서 본문 같은 의미 기반 질문에만 사용하고, 잔여석·시간표처럼 정확한 값을 묻는 질문에는 사용하지 않는다"는 부정형 지시를 명시적으로 포함한다(Stage 0/1 프롬프트 작성 시 반영).
 
 ## 9. Tool 실행 권한 범위 — write Tool 배제
 
@@ -116,11 +139,45 @@ Pinecone/Chroma/Weaviate/Milvus/Faiss/Qdrant/pgvector/Elasticsearch/pgvecto.rs 9
 ### 결정과 이유
 **B(write Tool 완전 배제)를 채택한다.** 이 앱의 핵심 가치(선착순 클릭 연습)와 직접 충돌하는 기능을 만들 이유가 없고, 구현 복잡도도 크게 줄어든다(확인 카드 흐름·write 가드레일·LangGraph 전부 불필요). read-only 범위만으로도 원래 동기(강의계획서 근거 상담)를 충분히 달성한다.
 
-## 10. 대화 상태 저장
+## 10. 대화 상태 저장 (2026-08-21 §3 재검토 반영 — 저장소 소유자가 Node에서 `ai-server`로 바뀜)
 
 - **작업 메모리(최근 N턴)**: Redis, TTL 부여 — Group C가 이미 확립한 "휘발성 상태 전용" 원칙 재사용(ADR-006 1.3)
 - **영구 히스토리**: MySQL `chat_sessions`/`chat_messages` 신설 — 추후 Tool 정확도/할루시네이션 측정용 eval 데이터 원본으로도 사용
-- 소유/접근 방식은 §3 결정에 따라 Node backend가 관리, Python은 내부 API 경유
+- **소유/접근 방식**: §3 최종 결정에 따라 `ai-server`(Python)가 이 Redis/MySQL을 직접 소유·연결한다. Node는 이 데이터에 접근하지 않는다.
+
+### 세션 경계 정의
+
+**세션 경계는 TTL이 아니라 사용자의 명시적 행동으로 정한다.** ChatGPT류 채팅 UX처럼 "새 대화" 버튼과 지난 대화 목록 조회가 필요하다고 판단해, 애초에 검토했던 "무활동 TTL 만료로 세션을 암묵적으로 분리하는 방식"을 폐기하고 이쪽으로 결정한다.
+
+- **신설 API**(`GET /api/ai/sessions`, `GET /api/ai/sessions/:id/messages`) — 요청 흐름은 다음과 같다: 프론트 → Node(`authMiddleware`로 JWT 검증) → Node가 인증된 `user_id`를 신뢰 헤더에 실어 `ai-server`로 그대로 프록시 → `ai-server`가 자기 소유 MySQL(`chat_sessions`/`chat_messages`)에 직접 쿼리해 응답. **실제 데이터 조회 로직은 `ai-server`가 갖고, Node는 인증·프록시만 한다** — §3 최종 결정에 따라 Node가 이 데이터를 직접 갖지 않기 때문이다.
+  - `GET /api/ai/sessions` — 내 세션 목록. `user_id`로 필터링.
+  - `GET /api/ai/sessions/:id/messages` — 특정 세션의 전체 대화 기록. **소유자 검증 필수** — Node가 넘긴 `user_id`가 그 세션의 주인이 아니면 403을 반환한다(안 그러면 세션 ID만 바꿔서 남의 대화를 조회할 수 있는 IDOR이 된다). 이 검증은 이제 `ai-server` 쪽 코드가 수행한다.
+  - "새 대화 시작"은 별도 엔드포인트가 필요 없다 — 프론트가 `session_id` 없이 `POST /api/ai/chat`을 호출하면 `ai-server`가 새 세션을 생성한다.
+- 이 두 API는 **LLM이 호출하는 Tool이 아니라, 채팅 UI 자체가 쓰는 일반 CRUD 엔드포인트**다. §8의 Tool 인벤토리/설계 원칙과는 무관하다.
+- **Redis 작업 메모리는 순수 캐시로 역할이 좁아진다.** 사용자가 오래된 세션을 다시 열면 Redis 캐시가 TTL로 이미 비어 있을 수 있다 — 이 경우 MySQL `chat_messages`(소스오브트루스)에서 최근 N턴을 다시 읽어와 Redis를 재구성한다(캐시 웜업). Redis가 비어 있어도 정보 손실은 없다. 이 웜업 로직도 전부 `ai-server` 프로세스 내부에서 끝난다(Node 왕복 불필요).
+
+### Redis 분리 — `redis-chat`, `ai-server`가 직접 소유
+
+**채팅 전용 Redis 컨테이너(`redis-chat`)를 신설한다. `ai-server`가 여기에 직접 연결한다** — 기존 Group C Redis(대기열/좌석 카운터)와는 인스턴스도, 접속 주체도 완전히 분리된다.
+
+- **이유**: 실시간 수강신청 Redis는 극한으로 튜닝된 지연 민감 워크로드다(이슈 #57, VUS=12,000급 실측). 채팅은 성격이 전혀 다른 워크로드(느긋한 읽기/쓰기)라, 같은 인스턴스를 공유하면 이론적으로 "noisy neighbor"(한쪽 부하가 다른 쪽 지연에 영향을 주는) 리스크가 있다. 두 도메인(실시간 수강신청 / AI 상담)은 바운디드 컨텍스트가 명확히 다르므로, "각 서비스가 자체 데이터스토어를 소유"하는 MSA 원칙을 물리적 분리뿐 아니라 접속 주체까지 끝까지 적용한다(§3 재검토).
+- **왜 지금 하는가(§4 AWS Vector DB 보류와 다른 점)**: §4에서 AWS를 보류한 건 "로컬 docker-compose로 완결"이라는 배포 플랫폼 원칙 때문이었다. Redis 컨테이너 하나를 로컬에 더 띄우는 건 이 원칙과 충돌하지 않는다. Redis 자체의 리소스 비용도 이 프로젝트가 실제로 CPU 병목을 겪었던 지점들(Node 백엔드, 대기열 폴링 부하)에 비해 무시할 수준이라 지금 분리하는 비용이 이미 충분히 싸다.
+- 기존 Group C의 Redis 연결·Lua 스크립트는 전혀 변경하지 않는다 — Node는 `redis-chat`을 아예 모른다.
+- AOF/RDB 영속화는 기존 `redis`와 동일하게 끈다 — 위 "세션 경계 정의"에서 확인했듯 Redis는 순수 캐시이고 MySQL이 소스오브트루스라, 재시작으로 캐시가 비어도 정보 손실이 없다.
+- **향후 K8s 이전(Phase 3) 시** `redis-chat` Deployment/Service를 하나 더 추가하면 되므로 자연스럽게 확장된다.
+
+### MySQL 분리 — `db-chat`, `ai-server`가 직접 소유
+
+**채팅 전용 MySQL 컨테이너(`db-chat`)를 신설한다. `ai-server`가 여기에 직접 연결하고, 스키마는 Python 마이그레이션 도구(Alembic)로 관리한다.**
+
+- `chat_sessions`/`chat_messages`는 기존 `db`(Users/Classes/Registration)와 물리적으로도, 스키마상으로도 완전히 분리된다 — Node의 다른 테이블과 DB 레벨 FK로 얽히지 않는다(사용자 ID는 정수 값으로만 참조). Cross-service DB 접근이나 조인이 필요한 지점이 없어 분리 비용이 낮다.
+- `requirements.txt`의 `sqlalchemy`/`mysql-connector-python`(§3에서 "죽은 의존성"이라고 확인했던 것)을 이제 실제로 사용한다 — 완전히 새로 까는 게 아니라 원래 있던 걸 되살리는 것.
+- `db-chat`은 기존 `db`(커스텀 Dockerfile + `init.sql` 시딩)와 달리 공식 `mysql:8.0` 이미지를 그대로 쓴다 — 강의 데이터 시딩이 필요 없고 스키마는 Alembic이 관리하므로 더 단순하다. 기존 `db`처럼 `healthcheck`를 둔다(`ai-server`가 MySQL 준비 전에 붙는 것을 방지).
+- Redis와 달리 이건 영구 데이터라 볼륨을 마운트한다(기존 `db`처럼 AOF/RDB를 끄는 대상이 아니다 — 애초에 Redis가 아니라 MySQL이라 해당 없음).
+
+### Rate limit 카운터는 여기 포함되지 않는다
+
+§15의 사용자 단위 rate limit 카운터는 "Node가 게이트웨이로서 요청을 통과시킬지 판단하는" 운영 관심사라, 채팅 도메인 데이터가 아니다. `redis-chat`(이제 `ai-server` 전용)이 아니라 **기존 Group C Redis**에 `ratelimit:chat:{user_id}` 네임스페이스로 둔다 — Node가 이미 갖고 있는 연결을 그대로 쓴다.
 
 ## 11. 클라이언트 통신 방식 — SSE
 
@@ -138,7 +195,29 @@ Pinecone/Chroma/Weaviate/Milvus/Faiss/Qdrant/pgvector/Elasticsearch/pgvecto.rs 9
 ### 결정과 이유
 **B(SSE)를 채택한다.** Gemini SDK의 네이티브 스트리밍과 궁합이 정확히 맞고, ADR-006 1.4가 WebSocket을 배제한 논리(Stateful 확장성 문제)가 여기서도 그대로 적용된다. 새 서비스를 만들지 않고 기존 `ai-server`(FastAPI)에 `POST /api/ai/chat`(SSE) 엔드포인트를 추가한다. nginx(ADR-003 연장)에 SSE용 버퍼링 해제(`proxy_buffering off`)/타임아웃 연장 설정이 추가로 필요하다.
 
-## 12. 프레임워크 결정 — RAG는 LangChain, Tool 호출 루프는 raw SDK, LangGraph는 미도입
+### 라우팅 토폴로지 — 프론트는 Node를 거쳐서만 채팅에 접근한다
+
+이 프로젝트엔 이미 프론트가 Python `ai-server`에 닿는 두 가지 서로 다른 선례가 있다.
+
+| 선례 | 경로 | 인증 | 상태 |
+|---|---|---|---|
+| A. `/api/schedule` | nginx가 `ai-server`로 직결(Node 미경유) | 없음 | 없음(요청마다 프론트가 course 데이터 전체를 body에 실어 보냄) |
+| B. `/api/ai/recommend`(`aiRoutes.js`) | 프론트 → Node(`aiController`가 내부적으로 `axios`로 `ai-server` 호출) | 없음(현재는 미적용) | 없음 |
+
+채팅은 이 둘과 성격이 다르다 — 호출마다 Gemini 토큰 비용이 발생하고(§14 폭주 방지 필요), `chat_sessions`/`chat_messages`(§10)에 영구 기록을 남겨야 하며, 그 기록이 신뢰할 수 있는 `user_id`를 가져야 나중에 eval 데이터로 쓸 수 있다. A처럼 직결하면 이 세 가지를 전부 `ai-server`(Python)에 새로 구현해야 하고, `ai-server`의 호스트 포트 노출(`docker-compose.yml`의 `5000:5000`)이 인증 우회로로 남는다.
+
+**B(Node 경유)를 채택한다.** 프론트 → nginx → Node(`POST /api/ai/chat`, `authMiddleware`로 로그인 필수) → Node가 `ai-server`의 SSE 응답을 그대로 프록시(passthrough)한다. 이유는 두 가지다.
+
+1. `/recommend`가 이미 이 패턴(B)을 쓰고 있어 일관성이 있다 — 채팅에서만 A로 갈 이유가 없다.
+2. §9에서 write Tool을 배제한 것과 같은 논리로, "비용이 발생하고 인증이 필요한 엔드포인트는 게이트웨이(Node)를 거친다"는 원칙을 하나로 통일하면 나중에 유지보수할 규칙이 줄어든다.
+
+구현 시 반영 사항:
+- Node의 `authMiddleware`(기존 JWT 검증 미들웨어)를 `/api/ai/chat`에 그대로 적용한다. 새 인증 방식을 만들 필요는 없다.
+- Node→`ai-server` 구간도 스트림을 그대로 흘려보내야 한다(Node가 응답을 버퍼링하지 않고 청크 단위로 `res.write()`). nginx `proxy_buffering off`는 nginx↔Node 구간에 적용하는 것만으로는 부족하고, Node 자체도 버퍼링하지 않게 짜야 한다.
+- `docker-compose.yml`의 `ai-server` 서비스에서 `ports: ["5000:5000"]` 직접 노출을 제거한다 — 정상 경로가 전부 Node를 거치게 되므로, 이 포트가 열려 있으면 인증을 우회해 비용을 유발시킬 수 있는 표면만 남는다(Stage 2-1에서 반영). 이 포트 제거가 아래 신뢰 헤더 방식의 보안 전제이기도 하다.
+- **사용자 신원 전파 (2026-08-21, §3 재검토 반영)**: 사용자 신원은 Node의 `authMiddleware` 단계에서 확인이 끝난 뒤, Node가 `x-user-id` 같은 신뢰 헤더를 붙여 `ai-server`로 프록시한다. §3에서 검토했던 "Python→Node 내부 API로 대화 기록 저장" + 별도 서비스 인증(공유 시크릿) 방식은 폐기됐다 — `ai-server`가 이제 자기 상태(Redis/MySQL, §10)를 직접 소유하므로 Node에 다시 써달라고 요청할 일이 없다. `ai-server`가 이 헤더를 그대로 신뢰해도 되는 건, 위에서 포트를 제거해 Docker 내부망을 거쳐 Node를 통과한 요청만 도달 가능하기 때문이다.
+
+## 12. 프레임워크 결정 — RAG·Tool 호출 루프 모두 LangChain으로 통합, LangGraph는 미도입 (2026-08-21 재검토 반영)
 
 ### 상황
 Tool 호출과 RAG 검색을 오케스트레이션할 프레임워크를 정해야 한다. 최신(2025~2026) 커뮤니티 동향까지 확인했다.
@@ -157,8 +236,20 @@ Tool 호출과 RAG 검색을 오케스트레이션할 프레임워크를 정해�
 | **C. 용도별 분리(RAG=LangChain, Tool 루프=raw SDK)** | RAG는 LangChain이 잘하는 영역(문서 ETL+검색 체인)이라 여기서 보일러플레이트 절감. Tool 호출 루프는 read-only 3~4개뿐인 사실상 선형 구조라 raw SDK로도 코드량 차이가 크지 않고, 디버깅 시 투명성은 유지됨 | 스택이 완전히 하나로 통일되지 않음(다만 각 영역에 맞는 도구를 쓰는 것이라 일관성 문제라기보다 의도된 분리) |
 | D. LangGraph 도입 | 루프·분기·human-in-the-loop이 필요한 경우 강력함 | 이 설계에서 LangGraph가 필요해 보였던 유일한 지점은 "write Tool 제안 → 사용자 확인 → 실행"이라는 human-in-the-loop 분기였는데, §9에서 write Tool 자체를 배제하기로 결정하면서 이 필요성이 사라짐. 남는 흐름(질문 → 필요시 RAG/Tool 조회 → 답변)은 순수 선형이라 LangGraph의 이점(루프/분기/체크포인트)을 쓸 데가 없음 |
 
-### 결정과 이유
+### 결정과 이유 (최초, 2026-08-20)
 **C(용도별 분리)를 채택하고, LangGraph는 도입하지 않는다.** "기술을 결론이 아니라 필요해서 쓴다"는 이 프로젝트의 포트폴리오 서술 원칙에 가장 정확히 맞는다 — 필요한 영역(RAG 보일러플레이트)엔 쓰고, 불필요한 영역(write Tool 배제로 더 단순해진 Tool 루프)엔 안 쓴다. write Tool 배제 결정(§9)으로 LangGraph가 필요했던 유일한 근거도 함께 사라졌다.
+
+### 재검토 (2026-08-21) — Tool 호출 루프도 LangChain으로 통합
+
+착수 논의 중(§9 Tool 호출 실패 정책을 검토하다가) 두 가지가 새로 드러났다.
+
+1. **"선형이라 프레임워크가 필요 없다"는 전제가 얕았다.** 실제로 안전하게 짜려면 (a) Node 내부 API 호출이 실패했을 때 예외를 그대로 던지지 않고 Tool 응답 형태로 모델에 돌려주는 처리, (b) 턴당 Tool 호출 횟수 상한(모델이 같은 Tool을 과도하게 반복 호출하는 것을 막는 안전장치)이 필요한데, 이 둘은 LangChain의 `@tool(handle_tool_error=True)`와 `AgentExecutor(max_iterations=...)`가 이미 제공한다. raw SDK로 가면 이 둘을 직접 구현하고 직접 테스트해야 한다.
+2. **RAG 검색도 "Agentic RAG" 패턴에 따라 Tool로 등록하는 게 표준이다**(LangChain에 `create_retriever_tool`처럼 이미 이 용도의 유틸이 있을 정도로 흔한 패턴). RAG 검색을 별도 경로로 안 두고 나머지 Tool들과 같은 tool-calling 루프 안에 두면, 위 표의 C안 단점("스택이 완전히 통일되지 않음")이 사라진다.
+
+### 최종 결정
+**Tool 호출 루프도 LangChain(`langchain-google-genai`의 `ChatGoogleGenerativeAI` + `bind_tools` + `AgentExecutor`)으로 통합한다. RAG 검색도 별도 경로가 아니라 Tool 중 하나로 등록한다(§8 Tool 설계 원칙 참고).** LangGraph는 여전히 미도입 — §9(write Tool 배제)로 human-in-the-loop 분기가 필요 없어진 근거는 그대로 유효하고, `AgentExecutor`만으로 에러 처리·iteration cap을 다 얻을 수 있어 그래프 엔진까지는 여전히 과하다.
+
+남아 있던 버전 churn 리스크(원래 A안의 장점)는 실질적인 트레이드오프로 계속 인정한다 — LangChain 에이전트 API는 과거 여러 번 크게 바뀐 전례가 있다. 다만 RAG 쪽에 이미 LangChain을 채택했으므로(§4~§6) 이 리스크는 어차피 지고 있던 것이고, Tool 루프까지 넓힌다고 새로 생기는 리스크는 아니다.
 
 ## 13. 청킹 전략 — 열린 사항
 
@@ -175,13 +266,37 @@ Tool 호출과 RAG 검색을 오케스트레이션할 프레임워크를 정해�
 
 테스트 질문 세트와 측정 원본은 `doc/experiment/`에 저장한다.
 
-## 15. 범위 밖 (이번 ADR에서는 다루지 않음)
+## 15. 비용 남용 방지 — Rate Limiting 구조
+
+### 상황
+채팅은 `/recommend`(버튼 클릭 1회 = 호출 1회)와 달리 사용자가 턴을 무제한 보낼 수 있어, Gemini 토큰 비용이 선형으로 늘어날 수 있다. §11 결정(Node 경유)으로 모든 요청이 인증된 상태로 Node를 통과하므로, 이 지점에 가드레일을 걸 수 있다.
+
+### 검토한 대안
+- **세션당 메시지 수 상한**: 대화 하나가 길어지는 것 자체를 막는 방식. 그러나 사용자가 "새 대화 시작"만 누르면 카운터가 리셋돼 남용 방지 장치로는 쉽게 우회된다. 게다가 §10의 Redis 작업 메모리(최근 N턴, TTL)가 이미 매 호출에 실리는 컨텍스트 크기를 상한선으로 묶어주고 있어(오래된 턴은 자연히 잊혀짐), "한 대화가 길어질수록 호출당 비용이 커지는" 문제는 이미 별도 이유로 완화돼 있다. 그래서 세션당 캡을 추가해도 새로 막는 게 거의 없다.
+- **사용자(계정) 단위 시간 윈도우 rate limit**: 사용자가 세션을 몇 개를 새로 열든 우회되지 않는다. 실제 프로덕션 채팅형 AI 서비스들의 표준 패턴이기도 하다.
+
+### 결정과 이유
+**사용자 단위 시간 윈도우 rate limit을 채택하고, 세션당 메시지 캡은 별도로 두지 않는다.** Node 계층에서 `user_id` 기준으로 Redis `INCR`+`EXPIRE`(fixed/sliding window) 카운터를 두는 구조로 확정한다 — 이미 "휘발성 상태는 Redis"라는 원칙(Group C, ADR-006 1.3)이 있어 새 인프라 없이 재사용 가능하다. 초과 시 429 응답으로 거절한다. **이 카운터는 `redis-chat`이 아니라 Node가 원래 갖고 있던 Group C Redis에 둔다**(§10 "Rate limit 카운터는 여기 포함되지 않는다" 참고) — `redis-chat`은 §3/§10 재검토 이후 `ai-server` 전용이라 Node가 접근하지 않는다.
+
+**구체적인 윈도우 길이·허용 횟수·§10의 N(작업 메모리로 유지할 턴 수)은 지금 정하지 않는다.** 실사용 패턴을 모른 채 숫자를 먼저 정하면 로드맵의 "naive/baseline 먼저, 측정 후 개선" 원칙(§14)과 어긋난다 — Stage 3 실측 단계에서 실제 호출 분포를 보고 확정한다.
+
+## 16. 범위 밖 (이번 ADR에서는 다루지 않음)
 
 - 실제 구현(→ `doc/AI-에이전트-구현계획.md`, Stage별 이슈로 분리)
 - 관리자용 강의계획서 업로드 UI(스코프 과다 — 로컬 1회성 적재 스크립트로 시작)
 - 정확한 청킹 규칙(§13, PDF 확보 후 확정)
 
 > `registrationRoutes` 최종안 확정 여부는 더 이상 이 설계와 무관하다 — §9에서 write Tool 자체를 배제했으므로, 에이전트가 신청/취소 API를 호출할 일이 없다.
+
+## 17. 열린 사항 (2026-08-21, 다음 세션에서 이어감)
+
+세 가지가 아직 결정 안 됐다.
+
+1. **RAG 재적재 트리거** (Stage 1-2 관련). 논의 시작함 — 트리거는 완전 수동(개발자가 새 PDF를 받으면 직접 스크립트 실행)으로 하는 쪽으로 기울었다. §16에서 이미 관리자 UI를 스코프 아웃했고, 학기당 1회 수준 빈도라 자동 감지는 오버엔지니어링이라는 근거. 아직 결정 안 된 것:
+   - **재적재 방식**: 매번 전체 wipe-and-reload할지, 변경분만 반영하는 증분 갱신을 할지.
+   - **동시성 안전장치**: Chroma가 §4 결정대로 `ai-server` 프로세스에 임베디드로 내장돼 있어서, 라이브 서버가 떠 있는 상태에서 별도 스크립트가 같은 영속 디렉토리에 동시에 쓰면 파일 락 충돌 위험이 있다 — 재적재 시 `ai-server`를 잠깐 멈춰야 하는지 확인 필요. (참고: `backend_1`의 `seedData.js && server.js` 패턴을 그대로 따라 하기엔 안 맞음 — 그건 로컬 MySQL에 대한 무료·멱등 시딩이라 매 재기동마다 돌려도 되지만, 이건 Gemini 임베딩 API를 호출하는 유료 작업이라 컨테이너 재기동마다 자동 실행하면 안 됨.)
+2. **eval 정답 라벨링 방법론** (§14 측정 계획 관련). "RAG hit rate"를 계산하려면 "정답 청크가 뭔지" 사람이 먼저 라벨링해야 하는데, 이 작업을 누가·언제 하는지 미정. Stage 1-1(청킹 규칙 확정) 타이밍에 자연스럽게 묶을 수 있어 보임 — 다만 확정은 안 됨.
+3. **기존 `/recommend` 버튼의 운명**. 채팅형 상담이 이 버튼을 대체하는지, 병존하는지 미정. Stage 2-2에 "위치 검토"로만 적혀 있고 결론이 없다.
 
 ## 부록 A. Vector DB 9종 비교 상세
 
