@@ -22,8 +22,8 @@
 
 - [x] 0-1. `docker-compose.yml`에 `ai-server` 전용 컨테이너 2개 신설: `redis-chat`(작업 메모리), `db-chat`(공식 `mysql:8.0` 이미지, `healthcheck` 포함) — 기존 Group C `redis`/`db`와 완전히 분리, `ai-server`가 직접 연결(Node는 관여 안 함) (ADR-010 §10 Redis/MySQL 분리) — 이슈 #66
 - [x] 0-2. `ai-server`에 Alembic 마이그레이션으로 `chat_sessions`/`chat_messages` 스키마 생성(`db-chat` 대상) — `requirements.txt`의 기존 `sqlalchemy`/`mysql-connector-python` 의존성 활용 (ADR-010 §10) — 이슈 #66
-- [ ] 0-3. `GET /api/courses/:code`(과목 단건 조회) 신설 (ADR-010 §8, 0-1/0-2와 병렬 가능)
-- [ ] 0-4. Node에 프록시 라우트 3개 신설(전부 `authMiddleware`로 로그인 필수, 인증 후 `x-user-id` 신뢰 헤더를 붙여 `ai-server`로 그대로 전달): `POST /api/ai/chat`, `GET /api/ai/sessions`, `GET /api/ai/sessions/:id/messages` — 프론트는 처음부터 `ai-server`를 직접 호출하지 않고 Node를 거친다. 실제 로직은 없고 인증+프록시만 한다(ADR-010 §3/§11 최종 결정)
+- [x] 0-3. `GET /api/courses/:code`(과목 단건 조회) 신설 (ADR-010 §8, 0-1/0-2와 병렬 가능) — 이슈 #68
+- [x] 0-4. Node에 프록시 라우트 3개 신설(전부 `authMiddleware`로 로그인 필수, 인증 후 `x-user-id` 신뢰 헤더를 붙여 `ai-server`로 그대로 전달): `POST /api/ai/chat`, `GET /api/ai/sessions`, `GET /api/ai/sessions/:id/messages` — 프론트는 처음부터 `ai-server`를 직접 호출하지 않고 Node를 거친다. 실제 로직은 없고 인증+프록시만 한다(ADR-010 §3/§11 최종 결정) — 이슈 #68. `ai-server`가 아직 이 경로들을 구현하지 않아(Stage 0-5) 프록시 자체는 E2E로 열리지 않음(라우팅 뼈대만 검증: 인증 게이트·에러 전파 확인)
 - [ ] 0-5. `ai-server`에 실제 엔드포인트 구현:
   - `POST /api/ai/chat`(비-스트리밍 우선) — LangChain(`langchain-google-genai`의 `ChatGoogleGenerativeAI` + `bind_tools` + `AgentExecutor`) 기반 Tool 호출 루프. read-only Tool 2개만 연동: 잔여석 조회(`GET /api/courses`), 과목 단건 조회(0-3) — 대기열 순번은 Tool 인벤토리에서 제외됨(ADR-010 §8). `AgentExecutor(max_iterations=...)`로 턴당 호출 상한, `@tool(handle_tool_error=True)`로 Tool 실패 시 에러를 모델에 되돌려주는 처리까지 이 단계에서 함께 검증. 응답 완료 후 자기 소유 `db-chat`에 직접 기록(Node 왕복 없음)
   - `GET /api/ai/sessions`/`GET /api/ai/sessions/:id/messages` — Node가 넘긴 `user_id`로 `db-chat`을 직접 쿼리, 세션 소유자 검증(IDOR 방지) 포함 (ADR-010 §7/§8/§10/§12)
