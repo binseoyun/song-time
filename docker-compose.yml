@@ -199,14 +199,51 @@ services:
         condition: service_started
     restart: unless-stopped
 
+  # AI 챗봇 작업 메모리(최근 N턴, TTL) — ai-server 전용. 기존 Group C `redis`(대기열/좌석
+  # 카운터, 지연 민감 워크로드)와 인스턴스·접속 주체 모두 분리한다 — 두 워크로드 성격이
+  # 전혀 달라(noisy neighbor 리스크) 같이 쓸 이유가 없고, "각 서비스가 자체 데이터스토어를
+  # 소유"하는 MSA 원칙을 접속 주체까지 끝까지 적용한다(ADR-010 §3/§10 재검토).
+  # 채팅은 재시작으로 캐시가 비어도 MySQL(db-chat)이 소스오브트루스라 정보 손실이 없어
+  # AOF/RDB 영속화는 기존 redis와 동일하게 끈다.
+  redis-chat:
+    image: redis:7.4-alpine
+    ports:
+      - "6380:6379"
+    restart: unless-stopped
+
+  # AI 챗봇 영구 대화 이력(chat_sessions/chat_messages) — ai-server가 직접 소유하고
+  # Alembic으로 스키마를 관리한다. 기존 `db`(Users/Classes/Registration)와 물리적으로도
+  # 스키마상으로도 완전히 분리되며, `db`처럼 커스텀 Dockerfile이 아니라 공식 mysql:8.0
+  # 이미지를 그대로 쓴다(ADR-010 §3/§10 재검토).
+  db-chat:
+    image: mysql:8.0
+    restart: unless-stopped
+    env_file:
+      - .env.chat.docker
+    ports:
+      - "3311:3306"
+    volumes:
+      - db_chat_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p\"$$MYSQL_ROOT_PASSWORD\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   ai-server:
     build:
       context: ./backend/ai-server
       dockerfile: Dockerfile
     env_file:
       - .env.docker
+      - .env.chat.docker
     depends_on:
-      - backend_1
+      backend_1:
+        condition: service_started
+      db-chat:
+        condition: service_healthy
+      redis-chat:
+        condition: service_started
     ports:
       - "5000:5000"
     restart: unless-stopped
@@ -241,4 +278,5 @@ services:
 
 volumes:
   db_data:
+  db_chat_data:
 

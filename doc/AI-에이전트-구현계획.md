@@ -20,8 +20,8 @@
 
 **순서 원칙(2026-08-21 추가)**: MSA 구조(컨테이너·상태 소유권)를 먼저 확정하고, 그 위에 에이전트 로직을 짠다 — 구조는 이미 도메인 분석으로 답이 나온 결정이라 naive/baseline 측정 대상이 아니고, 나중에 옮기려면 이미 짠 코드를 갈아엎어야 해서 먼저 하는 게 비용이 싸다(ADR-010 §3 재검토 참고). 아래 0-1/0-2가 인프라, 0-3/0-4가 라우팅 뼈대, 0-5가 그 위에서 작성하는 실제 에이전트 로직이다.
 
-- [ ] 0-1. `docker-compose.yml`에 `ai-server` 전용 컨테이너 2개 신설: `redis-chat`(작업 메모리), `db-chat`(공식 `mysql:8.0` 이미지, `healthcheck` 포함) — 기존 Group C `redis`/`db`와 완전히 분리, `ai-server`가 직접 연결(Node는 관여 안 함) (ADR-010 §10 Redis/MySQL 분리)
-- [ ] 0-2. `ai-server`에 Alembic 마이그레이션으로 `chat_sessions`/`chat_messages` 스키마 생성(`db-chat` 대상) — `requirements.txt`의 기존 `sqlalchemy`/`mysql-connector-python` 의존성 활용 (ADR-010 §10)
+- [x] 0-1. `docker-compose.yml`에 `ai-server` 전용 컨테이너 2개 신설: `redis-chat`(작업 메모리), `db-chat`(공식 `mysql:8.0` 이미지, `healthcheck` 포함) — 기존 Group C `redis`/`db`와 완전히 분리, `ai-server`가 직접 연결(Node는 관여 안 함) (ADR-010 §10 Redis/MySQL 분리) — 이슈 #66
+- [x] 0-2. `ai-server`에 Alembic 마이그레이션으로 `chat_sessions`/`chat_messages` 스키마 생성(`db-chat` 대상) — `requirements.txt`의 기존 `sqlalchemy`/`mysql-connector-python` 의존성 활용 (ADR-010 §10) — 이슈 #66
 - [ ] 0-3. `GET /api/courses/:code`(과목 단건 조회) 신설 (ADR-010 §8, 0-1/0-2와 병렬 가능)
 - [ ] 0-4. Node에 프록시 라우트 3개 신설(전부 `authMiddleware`로 로그인 필수, 인증 후 `x-user-id` 신뢰 헤더를 붙여 `ai-server`로 그대로 전달): `POST /api/ai/chat`, `GET /api/ai/sessions`, `GET /api/ai/sessions/:id/messages` — 프론트는 처음부터 `ai-server`를 직접 호출하지 않고 Node를 거친다. 실제 로직은 없고 인증+프록시만 한다(ADR-010 §3/§11 최종 결정)
 - [ ] 0-5. `ai-server`에 실제 엔드포인트 구현:
