@@ -225,7 +225,7 @@ Pinecone/Chroma/Weaviate/Milvus/Faiss/Qdrant/pgvector/Elasticsearch/pgvecto.rs 9
 - `docker-compose.yml`의 `ai-server` 서비스에서 `ports: ["5000:5000"]` 직접 노출을 제거한다 — 정상 경로가 전부 Node를 거치게 되므로, 이 포트가 열려 있으면 인증을 우회해 비용을 유발시킬 수 있는 표면만 남는다(Stage 2-1에서 반영). 이 포트 제거가 아래 신뢰 헤더 방식의 보안 전제이기도 하다.
 - **사용자 신원 전파 (2026-08-21, §3 재검토 반영)**: 사용자 신원은 Node의 `authMiddleware` 단계에서 확인이 끝난 뒤, Node가 `x-user-id` 같은 신뢰 헤더를 붙여 `ai-server`로 프록시한다. §3에서 검토했던 "Python→Node 내부 API로 대화 기록 저장" + 별도 서비스 인증(공유 시크릿) 방식은 폐기됐다 — `ai-server`가 이제 자기 상태(Redis/MySQL, §10)를 직접 소유하므로 Node에 다시 써달라고 요청할 일이 없다. `ai-server`가 이 헤더를 그대로 신뢰해도 되는 건, 위에서 포트를 제거해 Docker 내부망을 거쳐 Node를 통과한 요청만 도달 가능하기 때문이다.
 
-## 12. 프레임워크 결정 — RAG·Tool 호출 루프 모두 LangChain으로 통합, LangGraph는 미도입 (2026-08-21 재검토 반영)
+## 12. 프레임워크 결정 — RAG·Tool 호출 루프 모두 LangChain으로 통합 (2026-08-21, 2026-08-23 재검토 반영)
 
 ### 상황
 Tool 호출과 RAG 검색을 오케스트레이션할 프레임워크를 정해야 한다. 최신(2025~2026) 커뮤니티 동향까지 확인했다.
@@ -258,6 +258,18 @@ Tool 호출과 RAG 검색을 오케스트레이션할 프레임워크를 정해�
 **Tool 호출 루프도 LangChain(`langchain-google-genai`의 `ChatGoogleGenerativeAI` + `bind_tools` + `AgentExecutor`)으로 통합한다. RAG 검색도 별도 경로가 아니라 Tool 중 하나로 등록한다(§8 Tool 설계 원칙 참고).** LangGraph는 여전히 미도입 — §9(write Tool 배제)로 human-in-the-loop 분기가 필요 없어진 근거는 그대로 유효하고, `AgentExecutor`만으로 에러 처리·iteration cap을 다 얻을 수 있어 그래프 엔진까지는 여전히 과하다.
 
 남아 있던 버전 churn 리스크(원래 A안의 장점)는 실질적인 트레이드오프로 계속 인정한다 — LangChain 에이전트 API는 과거 여러 번 크게 바뀐 전례가 있다. 다만 RAG 쪽에 이미 LangChain을 채택했으므로(§4~§6) 이 리스크는 어차피 지고 있던 것이고, Tool 루프까지 넓힌다고 새로 생기는 리스크는 아니다.
+
+### 재검토 (2026-08-23) — `AgentExecutor`가 실제로 제거됨, `create_agent`로 전환
+
+바로 위 문단에서 인정했던 "버전 churn 리스크"가 Stage 0-5 착수 첫날 그대로 현실화됐다. `requirements.txt`에 `langchain`을 버전 고정 없이 설치하자 최신 1.3.16이 깔렸는데, `langchain.agents.AgentExecutor`/`create_tool_calling_agent`가 **패키지에서 완전히 삭제되어 있었다**(`ImportError`로 직접 확인). §12 조사 요약(위 "조사 결과 요약" 항목)이 "2025-10부터 LangChain 자체 에이전트 실행기도 내부적으로 LangGraph 위에서 동작"한다는 것까지는 미리 파악했지만, 그게 **공개 API 자체가 바뀌는 수준의 변화**로 이어질 거라고는 내다보지 못했다.
+
+**대안 검토**: (a) `langchain==0.3.x`대로 버전을 고정해 `AgentExecutor` API를 그대로 유지, (b) 최신 `langchain.agents.create_agent`(LangGraph 기반 컴파일 그래프를 반환)로 전환. 신규 프로젝트에서 이미 라이브러리 쪽에서 밀려난 API에 일부러 버전을 묶어두는 유지보수 부담과, 포트폴리오 관점에서 최신 스택을 쓰는 이점을 함께 고려해 **(b)를 채택**한다(사용자 결정, 2026-08-23).
+
+**실질적 영향은 작다** — 애플리케이션 코드는 여전히 함수 호출 한 번(`create_agent(model, tools, system_prompt=...)`)으로 끝나고, 직접 그래프를 그리지 않는다. 다만 다음은 §12 최종 결정 문구를 갱신해야 한다:
+- **"LangGraph는 여전히 미도입"이라는 문구는 이제 사실과 다르다.** 애플리케이션 코드 레벨의 복잡도는 늘지 않았지만(그래프를 직접 작성하지 않음), 실행 엔진 자체는 LangChain 1.0부터 LangGraph로 통합되어 이제 선택의 여지 없이 함께 따라온다. §12가 LangGraph를 "도입하지 않는다"고 판단했던 근거(human-in-the-loop 분기 불필요)는 여전히 유효하지만, 그 근거로 "라이브러리를 안 쓴다"는 결론까지는 더 이상 낼 수 없다 — 이제 LangChain을 쓰는 이상 LangGraph는 내부 의존성으로 항상 따라온다.
+- `AgentExecutor(max_iterations=...)`는 `create_agent`에 대응 파라미터가 없다. 대신 LangGraph 실행 엔진의 `recursion_limit`(그래프 스텝 상한)을 `agent.invoke(..., config={"recursion_limit": N})`으로 건다(`backend/ai-server/chat/agent.py`).
+- `@tool(handle_tool_error=True)`도 `langchain_core.tools.tool` 데코레이터에서 제거됐다. 대신 `create_agent`가 내부적으로 구성하는 `ToolNode`가 기본값으로 Tool 예외를 잡아 `ToolMessage`로 모델에 돌려준다 — 별도 설정 없이 동일한 효과를 얻는다.
+- `AIMessage.content`가 항상 문자열은 아니다 — 최신 `langchain-google-genai`(Gemini 3.x 응답)는 `[{"type": "text", "text": "..."}]` 형태의 콘텐츠 블록 리스트를 줄 수 있다. `db-chat`의 TEXT 컬럼에 쓰기 전에 평탄화하는 헬퍼가 필요했다(`chat/router.py`의 `_extract_text`).
 
 ## 13. 청킹 전략 — 열린 사항
 
