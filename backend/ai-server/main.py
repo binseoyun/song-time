@@ -10,6 +10,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from chat.router import router as chat_router
 from scheduler import generate_schedule
 
 # .env 파일 로드
@@ -38,6 +39,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# AI 챗봇 라우트(ADR-010, Stage 0-5) — POST /api/ai/chat, GET /api/ai/sessions,
+# GET /api/ai/sessions/:id/messages
+app.include_router(chat_router)
 
 
     
