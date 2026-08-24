@@ -32,7 +32,7 @@
   - [ ] 3,000명↑ 구간 붕괴 원인 분리(락 경합 vs 인프라 한계) 후속 실험 — Group C 실험으로 "락 경합이 아님"까지는 간접 확인됐으나, 정확한 인프라 병목 지점(커넥션 한도 등) 특정은 아직 안 함
   - [ ] 최종 개선안 선택 + ADR 작성
 - [x] Phase 3. K8s 운영화 (일부, 당겨서 진행) — Ingress 도입 + frontend same-origin 전환: K8s 배포 후 브라우저에서 로그인 검증 자체가 불가능했던 문제(클러스터 내부 DNS를 브라우저가 해석 못함) 해결. LoadBalancer×2 → Ingress 1개로 진입점 통합, docker-compose에도 nginx 리버스 프록시로 동일 구조 적용 ([ADR-003](ADR/ADR-003-Ingress-도입과-Frontend-API-주소-구성-방식-전환.md), 2026-08-04)
-- [ ] Phase 3. 나머지 (Probe 재설계, resource requests/limits+HPA, DB 마이그레이션 도구 도입) — resource/HPA는 이미 실험 01(Group A/B/C) 실측 데이터가 있어 실시간 수강신청 Stage 3의 Sentinel/풀 사이징보다 우선순위 높음(2026-08-19 결정)
+- [ ] Phase 3. 나머지 (Probe 재설계, resource requests/limits + CronHPA 사전 확장·HPA 병행([ADR-011](ADR/ADR-011-CronHPA-HPA-병행-확장-구조.md)), DB 마이그레이션 도구 도입) — resource/HPA는 이미 실험 01(Group A/B/C) 실측 데이터가 있어 실시간 수강신청 Stage 3의 Sentinel/풀 사이징보다 우선순위 높음(2026-08-19 결정)
 - [ ] Phase 4. CI/CD
 - [ ] Phase 5. 관측성
 
