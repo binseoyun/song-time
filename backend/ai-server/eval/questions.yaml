@@ -1,51 +1,59 @@
 # =============================================================================
 # AI 챗봇 Tool 라우팅 정확도 — 질문 세트 (이슈 #74, ADR-010 §8/§14)
 # =============================================================================
-# 이 파일은 사람이 손으로 채운다(ADR-010 §14 "1차 완전 수동"). 아래 시드 예시를
-# 참고해 카테고리별로 25~30개까지 채운 뒤, 라벨(expect_*)을 검수받는다.
+# 카테고리 7종 x 10개 = 70 시나리오. 라벨(expect_*)은 seedData.js(2026-08-26) 대조.
 #
-# 현재 에이전트가 가진 Tool은 2개뿐이다(RAG는 Stage 1에서 추가):
-#   search_courses(keyword)      : 과목명/학과명에 keyword가 든 과목들의 잔여석 목록
-#   get_course_by_code(code)     : 과목 코드로 단건 상세(교수/시간표/잔여석)
+# 에이전트 Tool 2개 (RAG는 Stage 1에서 추가):
+#   search_courses(keyword)   : 과목명/학과명에 keyword가 든 과목들의 잔여석 목록
+#                               (전 과목 department가 '컴퓨터공학' 한 값이라 사실상 과목명 매칭만 유효)
+#   get_course_by_code(code)  : 과목 코드로 단건 상세(교수/시간표/잔여석)
 #
 # -----------------------------------------------------------------------------
-# 항목(시나리오) 스키마
+# 스키마
 # -----------------------------------------------------------------------------
-#   id        : 고유 식별자.  <카테고리약자>-<번호>  예: search-01, multiturn-03
+#   id        : <카테고리약자>-NN
 #   category  : 과목검색 | 코드조회 | 잔여석 | 분반비교 | 모호 | 범위밖 | 멀티턴
-#   note      : (선택) 이 질문이 노리는 것 / 라벨 근거. 검수 때 읽는다.
-#   turns     : 대화 턴 리스트. 단일턴이면 1개, 멀티턴이면 여러 개(순서대로 실행).
+#   note      : 이 질문이 노리는 것 / 라벨 근거
+#   turns[] :
+#     user                    : 사용자 발화
+#     expect_tool             : search_courses | get_course_by_code | none | any | ignore
+#         none   = Tool 부르면 안 됨 (거절 / "화면에서 직접" 유도가 정답)
+#         any    = 뭐든 하나는 불러야 함 (종류 안 따짐)
+#         ignore = Tool 차원 채점 안 함 (멀티턴 후속처럼 히스토리로 답해도 정답)
+#     expect_args             : {인자: 부분문자열}. 구체 Tool일 때만. 공백 접어서 비교
+#     answer_must_include     : [문자열,...] 최종 답변에 전부 있어야 통과 (교수명 등 안정값 위주)
+#     answer_must_not_include : [문자열,...] 하나라도 있으면 실패 (할루시네이션 감지)
 #
-#   turns[] 필드
-#     user                    : (필수) 사용자 발화
-#     expect_tool             : (필수) 이 턴에서 기대하는 Tool 동작
-#         search_courses          - 반드시 search_courses 호출
-#         get_course_by_code      - 반드시 get_course_by_code 호출
-#         none                    - Tool을 부르면 안 됨 (거절 / "화면에서 직접" 유도가 정답)
-#         any                     - 뭐든 하나는 불러야 함 (종류는 안 따짐)
-#         ignore                  - Tool 차원 채점 안 함 (멀티턴 후속처럼 히스토리로 답해도 정답)
-#     expect_args             : (선택) {인자이름: 부분문자열}. 해당 인자에 이 문자열이
-#                               들어 있으면 통과. 공백은 접어서 비교. search_courses/
-#                               get_course_by_code 를 기대할 때만 의미 있음.
-#     answer_must_include     : (선택) [문자열, ...] 최종 답변에 전부 들어 있어야 통과.
-#                               좌석 수처럼 변동값은 피하고 교수명·과목코드 등 안정값을
-#                               쓴다. 좌석 수를 쓸 거면 "갓 시드한 DB" 전제로 검수 시 확정.
-#     answer_must_not_include : (선택) [문자열, ...] 하나라도 들어 있으면 실패. 할루시네이션
-#                               감지용(예: 존재하지 않는 과목을 지어내는지).
-#
-# 시드 데이터 근거값(2026-08-26 seedData.js 기준, 검수 시 재확인):
-#   클라우드시스템 21003735-1  정원40 신청39 → 1자리   교수 김윤희, 김서영
-#   알고리즘       21000549-1  정원90 신청75 → 15자리  교수 안태훈
-#   알고리즘       21000549-2  정원80 신청65 → 15자리  교수 안태훈
-#   데이터베이스설계와질의  21003183-1/-2/-3  3개 분반   교수 심준호
-#   데이터베이스   21102538-1  정원100 신청98 → 2자리   교수 박영호
-#   딥러닝개론     21105625-1  정원70 신청57 → 13자리   교수 홍기범
+# 시드 데이터 참조값 (검수 시 재확인 — 연습 앱으로 신청 돌렸으면 db 볼륨 초기화 후 측정)
+#   존재하지 않는 과목(할루시네이션 테스트용): 운영체제, 자료구조, 컴파일러, 데이터구조
+#   전 과목 department='컴퓨터공학'. 교수명은 과목명(name)에 없음 → keyword로 교수 검색 불가
+#   자리 0(마감)  : 독일어Ⅰ 21000203-1 (40/40)
+#   자리 1        : 클라우드시스템 21003735-1(김윤희·김서영) / 인공지능입문 21105364-1(최윤혁) /
+#                   프로그래밍방법론 21003683-1(최윤혁) / 자바프로그래밍 21000557-3(박숙영) /
+#                   프로그래밍개론 21002144-3(박수현) / 경영정보시스템 21001083-3(한은정)
+#   분반 다수     : 데이터베이스설계와질의 21003183-1/2/3 (심준호, 잔여 20/2/19)
+#                   자바프로그래밍 21000557-1/2/3 (창병모/박숙영/박숙영, 잔여 20/3/1)
+#                   컴퓨터수학 21002147-1/2/3 (채희준/최영우/최영우, 잔여 44/6/20)
+#                   알고리즘 21000549-1/2 (안태훈, 잔여 15/15)
+#                   알고리즘입문 21100720-1/2/3 (강지우/강지우/정성훈, 잔여 13/18/28)
+#                   공학수학I 21102525-1/2/3 (박화진, 잔여 13/32/8)
+#                   컴퓨터그래픽스 21000558-1/2 (정영주, 잔여 5/2)
+#                   웹프로그래밍(캡스톤디자인) 21105365-1/2 (김상연, 잔여 4/55)
+#                   데이터베이스 21102538-1/2 (박영호, 잔여 2/6)
+#   한 교수 여러 과목: 홍기범(파이썬데이터분석·딥러닝개론) / 창병모(리눅스시스템·자바프로그래밍-1) /
+#                   박영호(데이터베이스 2분반) / 정영주(컴퓨터그래픽스·영상정보처리) /
+#                   강지우(알고리즘입문·센서프로그래밍·졸업프로젝트) / 박화진(공학수학I·AR/VR게임프로그래밍)
+#   이름 겹침(모호): "데이터베이스"→데이터베이스설계와질의+데이터베이스 / "알고리즘"→알고리즘+알고리즘입문 /
+#                   "딥러닝"→딥러닝개론+딥러닝원리와응용 / "보안"→네트워크보안+시스템보안 /
+#                   "네트워크"→네트워크보안+컴퓨터네트워크Ⅰ+네트워크(캡스톤디자인) / "인공지능"→인공지능입문+인공지능산업체특강
 # =============================================================================
 
-# ----- 과목검색: 이름/키워드로 목록을 찾는 질문 (search_courses) -----
+
+# ===== 과목검색: 이름/키워드로 목록을 찾는 질문 (search_courses) =====
+
 - id: search-01
   category: 과목검색
-  note: "전 과목 department가 '컴퓨터공학'이라 keyword는 과목명에 걸려야 함"
+  note: "keyword가 여러 과목명에 걸림 — 목록 반환 기대"
   turns:
     - user: "이번 학기에 데이터베이스 관련된 과목 뭐뭐 있어?"
       expect_tool: search_courses
@@ -53,15 +61,81 @@
 
 - id: search-02
   category: 과목검색
-  note: "키워드가 과목명 일부에만 등장 (딥러닝개론 / 딥러닝원리와응용)"
+  note: "딥러닝개론 / 딥러닝원리와응용 둘 다 매칭"
   turns:
     - user: "딥러닝 들어가는 수업 알려줘"
       expect_tool: search_courses
       expect_args: { keyword: "딥러닝" }
 
-# ----- 코드조회: 과목 코드가 주어진 질문 (get_course_by_code) -----
+- id: search-03
+  category: 과목검색
+  note: "교수명은 name에 없음 → keyword='심준호'면 빈 결과. 전체 조회 후 필터가 이상적. Tool 설계 한계 노출용 — 라벨은 search_courses 호출 자체까지만 요구"
+  turns:
+    - user: "심준호 교수님 수업 뭐뭐 하셔?"
+      expect_tool: search_courses
+      answer_must_include: ["데이터베이스설계와질의"]
+
+- id: search-04
+  category: 과목검색
+  note: "클라우드시스템 단건이지만 코드 없이 물음 → 검색"
+  turns:
+    - user: "클라우드 관련된 과목 있어?"
+      expect_tool: search_courses
+      expect_args: { keyword: "클라우드" }
+
+- id: search-05
+  category: 과목검색
+  note: "네트워크보안 / 시스템보안 매칭"
+  turns:
+    - user: "보안 쪽 수업 뭐 있는지 보여줘"
+      expect_tool: search_courses
+      expect_args: { keyword: "보안" }
+
+- id: search-06
+  category: 과목검색
+  note: "'캡스톤디자인'이 이름에 든 과목 다수"
+  turns:
+    - user: "캡스톤디자인 과목 목록 좀 뽑아줘"
+      expect_tool: search_courses
+      expect_args: { keyword: "캡스톤" }
+
+- id: search-07
+  category: 과목검색
+  note: "인공지능입문 / 인공지능산업체특강 매칭"
+  turns:
+    - user: "인공지능 들어가는 과목 다 알려줘"
+      expect_tool: search_courses
+      expect_args: { keyword: "인공지능" }
+
+- id: search-08
+  category: 과목검색
+  note: "자바프로그래밍 3분반 매칭"
+  turns:
+    - user: "자바 배우는 수업 있어?"
+      expect_tool: search_courses
+      expect_args: { keyword: "자바" }
+
+- id: search-09
+  category: 과목검색
+  note: "네트워크보안 / 컴퓨터네트워크Ⅰ / 네트워크(캡스톤디자인) 매칭"
+  turns:
+    - user: "네트워크 관련 강의 뭐뭐 열렸어?"
+      expect_tool: search_courses
+      expect_args: { keyword: "네트워크" }
+
+- id: search-10
+  category: 과목검색
+  note: "조건(3학점/전공선택)은 keyword로 못 거름 — 전체 조회 후 필터 기대. 한계 노출"
+  turns:
+    - user: "3학점짜리 전공선택 과목 알려줘"
+      expect_tool: search_courses
+
+
+# ===== 코드조회: 과목 코드가 주어진 질문 (get_course_by_code) =====
+
 - id: code-01
   category: 코드조회
+  note: "코드로 잔여석 — search_courses(keyword='21003735-1')는 빈 결과라 단건 조회가 맞음"
   turns:
     - user: "21003735-1 이 과목 지금 몇 자리 남았어?"
       expect_tool: get_course_by_code
@@ -69,80 +143,504 @@
 
 - id: code-02
   category: 코드조회
-  note: "코드 + 상세 속성(교수) 질문 — 단건 조회가 맞음"
   turns:
     - user: "21000549-1 담당 교수님이 누구야?"
       expect_tool: get_course_by_code
       expect_args: { code: "21000549-1" }
       answer_must_include: ["안태훈"]
 
-# ----- 잔여석: 이름만 주고 자리 여부를 묻는 질문 (검색 후 답) -----
+- id: code-03
+  category: 코드조회
+  turns:
+    - user: "21102538-1 시간표 좀 알려줘"
+      expect_tool: get_course_by_code
+      expect_args: { code: "21102538-1" }
+
+- id: code-04
+  category: 코드조회
+  note: "구어체 + 코드"
+  turns:
+    - user: "친구가 21105364-1 들으라던데 이거 무슨 과목이야?"
+      expect_tool: get_course_by_code
+      expect_args: { code: "21105364-1" }
+      answer_must_include: ["인공지능입문"]
+
+- id: code-05
+  category: 코드조회
+  turns:
+    - user: "21003183-2 여기 자리 있나?"
+      expect_tool: get_course_by_code
+      expect_args: { code: "21003183-2" }
+
+- id: code-06
+  category: 코드조회
+  turns:
+    - user: "21000557-3 몇 학점짜리야?"
+      expect_tool: get_course_by_code
+      expect_args: { code: "21000557-3" }
+      answer_must_include: ["3"]
+
+- id: code-07
+  category: 코드조회
+  turns:
+    - user: "21102905-1 이 과목 담당 교수랑 요일 알려줘"
+      expect_tool: get_course_by_code
+      expect_args: { code: "21102905-1" }
+      answer_must_include: ["이기용"]
+
+- id: code-08
+  category: 코드조회
+  turns:
+    - user: "21105625-1 무슨 요일에 하는 수업이야?"
+      expect_tool: get_course_by_code
+      expect_args: { code: "21105625-1" }
+
+- id: code-09
+  category: 코드조회
+  turns:
+    - user: "21002144-3 교수님 성함이 어떻게 되세요?"
+      expect_tool: get_course_by_code
+      expect_args: { code: "21002144-3" }
+      answer_must_include: ["박수현"]
+
+- id: code-10
+  category: 코드조회
+  note: "존재하지 않는 코드 — 없다고 답해야. get_course_by_code는 404 시 에러 문자열 반환"
+  turns:
+    - user: "99999999-9 이 과목 정보 좀 줘"
+      expect_tool: get_course_by_code
+      expect_args: { code: "99999999-9" }
+      answer_must_not_include: ["운영체제", "자료구조"]
+
+
+# ===== 잔여석: 코드 없이 이름만 주고 자리 여부를 묻는 질문 (검색 후 답) =====
+
 - id: seats-01
   category: 잔여석
-  note: "코드 없이 이름만 → search_courses로 찾아 잔여석을 답해야"
+  note: "클라우드시스템 잔여 1"
   turns:
     - user: "클라우드시스템 지금 신청 가능해?"
       expect_tool: search_courses
       expect_args: { keyword: "클라우드시스템" }
 
-# ----- 분반비교: 동명 과목이 여러 분반, 비교/선택을 요구 -----
+- id: seats-02
+  category: 잔여석
+  note: "독일어Ⅰ 잔여 0 (40/40) — 마감됐다고 답해야. answer 체크는 변동성 때문에 뺌"
+  turns:
+    - user: "독일어1 아직 자리 있어?"
+      expect_tool: search_courses
+      expect_args: { keyword: "독일어" }
+
+- id: seats-03
+  category: 잔여석
+  note: "프로그래밍방법론 잔여 1"
+  turns:
+    - user: "프로그래밍방법론 벌써 마감됐나?"
+      expect_tool: search_courses
+      expect_args: { keyword: "프로그래밍방법론" }
+
+- id: seats-04
+  category: 잔여석
+  note: "인공지능입문 잔여 1"
+  turns:
+    - user: "인공지능입문 아직 들어갈 수 있어?"
+      expect_tool: search_courses
+      expect_args: { keyword: "인공지능입문" }
+
+- id: seats-05
+  category: 잔여석
+  note: "데이터마이닝및분석 잔여 9"
+  turns:
+    - user: "데이터마이닝및분석 자리 남았어?"
+      expect_tool: search_courses
+      expect_args: { keyword: "데이터마이닝" }
+
+- id: seats-06
+  category: 잔여석
+  note: "파이썬데이터분석 잔여 4"
+  turns:
+    - user: "파이썬데이터분석 신청할 수 있어?"
+      expect_tool: search_courses
+      expect_args: { keyword: "파이썬데이터분석" }
+
+- id: seats-07
+  category: 잔여석
+  note: "소프트웨어공학 잔여 14"
+  turns:
+    - user: "소프트웨어공학 자리 넉넉한 편이야?"
+      expect_tool: search_courses
+      expect_args: { keyword: "소프트웨어공학" }
+
+- id: seats-08
+  category: 잔여석
+  note: "영상정보처리 잔여 13"
+  turns:
+    - user: "영상정보처리 지금 신청하면 들어가져?"
+      expect_tool: search_courses
+      expect_args: { keyword: "영상정보처리" }
+
+- id: seats-09
+  category: 잔여석
+  note: "네트워크보안 잔여 4"
+  turns:
+    - user: "네트워크보안 몇 명이나 더 받을 수 있어?"
+      expect_tool: search_courses
+      expect_args: { keyword: "네트워크보안" }
+
+- id: seats-10
+  category: 잔여석
+  note: "존재하지 않는 과목 — 없다고 해야. 검색은 하되(빈 결과) 지어내지 말 것"
+  turns:
+    - user: "운영체제 이번 학기에 자리 있어?"
+      expect_tool: search_courses
+      expect_args: { keyword: "운영체제" }
+      answer_must_not_include: ["30명", "40명", "자리가 있습니다"]
+
+
+# ===== 분반비교: 동명 과목이 여러 분반, 비교/선택을 요구 (search_courses) =====
+
 - id: section-01
   category: 분반비교
-  note: "데이터베이스설계와질의 3개 분반 중 고르기 — search 후 여러 결과를 비교해야"
+  note: "데이터베이스설계와질의 3분반 잔여 20/2/19 → 21003183-1"
   turns:
     - user: "데이터베이스설계와질의 분반 중에 자리 제일 많은 거 뭐야?"
       expect_tool: search_courses
       expect_args: { keyword: "데이터베이스설계와질의" }
 
-# ----- 모호: 여러 과목이 매칭돼 되묻거나 목록 제시가 바람직 -----
+- id: section-02
+  category: 분반비교
+  note: "자바프로그래밍 3분반 잔여 20/3/1 → 21000557-1 (창병모)"
+  turns:
+    - user: "자바프로그래밍 여러 개던데 그중에 자리 많은 분반으로 알려줘"
+      expect_tool: search_courses
+      expect_args: { keyword: "자바프로그래밍" }
+
+- id: section-03
+  category: 분반비교
+  note: "keyword '알고리즘'이 알고리즘입문까지 매칭 — 모델이 알고리즘(2분반, 둘 다 15)에 집중해야"
+  turns:
+    - user: "알고리즘 두 분반 자리 차이 있어?"
+      expect_tool: search_courses
+      expect_args: { keyword: "알고리즘" }
+
+- id: section-04
+  category: 분반비교
+  note: "컴퓨터수학 3분반 잔여 44/6/20"
+  turns:
+    - user: "컴퓨터수학 분반별로 자리 어떻게 돼?"
+      expect_tool: search_courses
+      expect_args: { keyword: "컴퓨터수학" }
+
+- id: section-05
+  category: 분반비교
+  note: "프로그래밍개론 3분반 잔여 5/21/1 — 오전(월수11:00, 화목15:00)/오후(월수14:00)"
+  turns:
+    - user: "프로그래밍개론 오전 분반이랑 오후 분반 중에 어디가 자리 많아?"
+      expect_tool: search_courses
+      expect_args: { keyword: "프로그래밍개론" }
+
+- id: section-06
+  category: 분반비교
+  note: "공학수학I 3분반 잔여 13/32/8 → 21102525-2"
+  turns:
+    - user: "공학수학1 어느 분반이 제일 여유 있어?"
+      expect_tool: search_courses
+      expect_args: { keyword: "공학수학" }
+
+- id: section-07
+  category: 분반비교
+  note: "컴퓨터그래픽스 2분반 잔여 5/2"
+  turns:
+    - user: "컴퓨터그래픽스 두 분반 중에 신청 가능한 거 알려줘"
+      expect_tool: search_courses
+      expect_args: { keyword: "컴퓨터그래픽스" }
+
+- id: section-08
+  category: 분반비교
+  note: "웹프로그래밍(캡스톤디자인) 2분반 잔여 4/55"
+  turns:
+    - user: "웹프로그래밍 캡스톤 1분반이랑 2분반 자리 차이 커?"
+      expect_tool: search_courses
+      expect_args: { keyword: "웹프로그래밍" }
+
+- id: section-09
+  category: 분반비교
+  note: "알고리즘입문 3분반 잔여 13/18/28"
+  turns:
+    - user: "알고리즘입문 세 분반 자리 다 비교해줘"
+      expect_tool: search_courses
+      expect_args: { keyword: "알고리즘입문" }
+
+- id: section-10
+  category: 분반비교
+  note: "데이터베이스(박영호) 2분반 잔여 2/6 — keyword '데이터베이스'가 설계와질의도 매칭됨"
+  turns:
+    - user: "데이터베이스 분반 중에 아직 신청되는 거 있어?"
+      expect_tool: search_courses
+      expect_args: { keyword: "데이터베이스" }
+
+
+# ===== 모호: 여러 과목이 매칭돼 되묻거나 목록 제시가 바람직 (최소 search_courses) =====
+
 - id: ambiguous-01
   category: 모호
-  note: "'데이터베이스' / '데이터베이스설계와질의' 등 여러 과목 매칭. 되묻기 또는 목록 제시가 이상적이나, 최소한 search_courses는 불러야 함"
+  note: "'데이터베이스'→데이터베이스설계와질의+데이터베이스 (다른 과목 2종). 답변에서 구분/되물음이 이상적"
   turns:
     - user: "데이터베이스 수업 자리 있어?"
       expect_tool: search_courses
       expect_args: { keyword: "데이터베이스" }
 
-# ----- 범위밖: Tool을 부르면 안 되는 질문 (거절 / UI 유도) -----
-- id: outofscope-01
+- id: ambiguous-02
+  category: 모호
+  note: "'알고리즘'→알고리즘+알고리즘입문"
+  turns:
+    - user: "알고리즘 신청하려는데 어떻게 돼 있어?"
+      expect_tool: search_courses
+      expect_args: { keyword: "알고리즘" }
+
+- id: ambiguous-03
+  category: 모호
+  note: "'딥러닝'→딥러닝개론+딥러닝원리와응용"
+  turns:
+    - user: "딥러닝 수업 하나 듣고 싶은데 자리 있는 거 있어?"
+      expect_tool: search_courses
+      expect_args: { keyword: "딥러닝" }
+
+- id: ambiguous-04
+  category: 모호
+  note: "'네트워크'→3개 다른 과목"
+  turns:
+    - user: "네트워크 과목 듣고 싶어"
+      expect_tool: search_courses
+      expect_args: { keyword: "네트워크" }
+
+- id: ambiguous-05
+  category: 모호
+  note: "'보안'→네트워크보안+시스템보안"
+  turns:
+    - user: "보안 쪽으로 자리 있는 거 아무거나 추천해줘"
+      expect_tool: search_courses
+      expect_args: { keyword: "보안" }
+
+- id: ambiguous-06
+  category: 모호
+  note: "'인공지능'→인공지능입문+인공지능산업체특강"
+  turns:
+    - user: "인공지능 과목 중에 신청 가능한 거 뭐야?"
+      expect_tool: search_courses
+      expect_args: { keyword: "인공지능" }
+
+- id: ambiguous-07
+  category: 모호
+  note: "'화공기초화학'→Ⅰ+Ⅱ"
+  turns:
+    - user: "화공기초화학 자리 남았어?"
+      expect_tool: search_courses
+      expect_args: { keyword: "화공기초화학" }
+
+- id: ambiguous-08
+  category: 모호
+  note: "'프로그래밍'→10개 이상 매칭. 되물음이 특히 바람직"
+  turns:
+    - user: "프로그래밍 수업 뭐 들으면 좋을까?"
+      expect_tool: search_courses
+      expect_args: { keyword: "프로그래밍" }
+
+- id: ambiguous-09
+  category: 모호
+  note: "'캡스톤'→다수. 어느 걸 원하는지 되물어야"
+  turns:
+    - user: "캡스톤 하나 들어야 하는데 자리 있는 거 알려줘"
+      expect_tool: search_courses
+      expect_args: { keyword: "캡스톤" }
+
+- id: ambiguous-10
+  category: 모호
+  note: "'데이터'→데이터베이스*·데이터마이닝및분석·빅데이터와수치해석·파이썬데이터분석 등. 매우 모호"
+  turns:
+    - user: "그 데이터 어쩌고 하는 수업 자리 있나 봐줘"
+      expect_tool: search_courses
+      expect_args: { keyword: "데이터" }
+
+
+# ===== 범위밖: Tool을 부르면 안 되는 질문 (거절 / UI 유도) =====
+
+- id: oos-01
   category: 범위밖
-  note: "신청 대행 — write Tool은 설계상 배제(§9). 거절 + 직접 신청 안내가 정답"
+  note: "신청 대행 — write Tool 배제(§9). 거절 + 직접 신청 안내"
   turns:
     - user: "나 대신 알고리즘 수강신청 좀 해줘"
       expect_tool: none
 
-- id: outofscope-02
+- id: oos-02
   category: 범위밖
-  note: "대기열 순번은 Tool 인벤토리에서 의도적 제외(§8). UI에서 직접 확인 유도"
+  note: "대기열 순번은 Tool 인벤토리에서 의도적 제외(§8) — UI에서 직접 확인 유도"
   turns:
     - user: "지금 내 대기열 순번 몇 번이야?"
       expect_tool: none
 
-- id: outofscope-03
+- id: oos-03
   category: 범위밖
-  note: "수강신청과 무관 — 답할 수 없다고 해야 (Stage 3-1 범위 밖 거절과도 연결)"
+  note: "완전 무관"
   turns:
     - user: "오늘 서울 날씨 어때?"
       expect_tool: none
 
-# ----- 멀티턴: 앞 대화를 기억해야 답할 수 있는 질문 -----
+- id: oos-04
+  category: 범위밖
+  note: "주관적 강의평 — Tool로 알 수 없음"
+  turns:
+    - user: "클라우드시스템 꿀강이야? 과제 많아?"
+      expect_tool: none
+
+- id: oos-05
+  category: 범위밖
+  note: "취소 대행 — write 배제"
+  turns:
+    - user: "나 데이터베이스 신청한 거 취소해줘"
+      expect_tool: none
+
+- id: oos-06
+  category: 범위밖
+  note: "학사 제도 질문 — 이 챗봇 범위 밖"
+  turns:
+    - user: "졸업하려면 전공 몇 학점 들어야 해?"
+      expect_tool: none
+
+- id: oos-07
+  category: 범위밖
+  note: "개인 수강 내역 조회 — Tool 없음, 사용자 상태는 UI에서"
+  turns:
+    - user: "내가 지금 몇 과목이나 신청했어?"
+      expect_tool: none
+
+- id: oos-08
+  category: 범위밖
+  note: "관심과목/장바구니 조작 — write 성격"
+  turns:
+    - user: "딥러닝개론 관심과목에 담아줘"
+      expect_tool: none
+
+- id: oos-09
+  category: 범위밖
+  note: "교수 개인 평가 — 알 수 없음"
+  turns:
+    - user: "심준호 교수님 잘 가르치셔? 학점 잘 주셔?"
+      expect_tool: none
+
+- id: oos-10
+  category: 범위밖
+  note: "코딩 대행 — 완전 무관"
+  turns:
+    - user: "파이썬으로 버블정렬 코드 좀 짜줘"
+      expect_tool: none
+
+
+# ===== 멀티턴: 앞 대화를 기억해야 답할 수 있는 질문 =====
+
 - id: multiturn-01
   category: 멀티턴
-  note: "2턴째 '그거'가 앞 턴 과목(알고리즘)을 가리킴. 교수명은 1턴 search 결과에 이미 있어 재호출 없이 답해도 정답 → expect_tool: ignore, 답변만 채점"
+  note: "1턴 검색(클라우드시스템 단건) → 2턴 '그거' = 클라우드시스템. 교수명은 1턴 결과에 있어 재호출 없이 답 가능 → ignore"
   turns:
-    - user: "알고리즘 자리 있어?"
+    - user: "클라우드시스템 자리 있어?"
       expect_tool: search_courses
-      expect_args: { keyword: "알고리즘" }
+      expect_args: { keyword: "클라우드시스템" }
     - user: "그거 교수님은 누구셔?"
       expect_tool: ignore
-      answer_must_include: ["안태훈"]
+      answer_must_include: ["김윤희"]
 
 - id: multiturn-02
   category: 멀티턴
-  note: "1턴 범위밖(신청 대행 거절) → 2턴은 정상 조회로 복귀. 맥락 전환 처리"
+  note: "1턴 신청 대행 거절 → 2턴 정상 조회로 복귀. 맥락 전환"
   turns:
     - user: "딥러닝개론 나 대신 신청해줄 수 있어?"
       expect_tool: none
     - user: "그럼 그 수업 지금 몇 자리 남았는지만 알려줘"
       expect_tool: search_courses
       expect_args: { keyword: "딥러닝개론" }
+
+- id: multiturn-03
+  category: 멀티턴
+  note: "1턴 분반 목록 → 2턴 '화목 수업' = 21003183-3. 분반 필터, 컨텍스트 유지"
+  turns:
+    - user: "데이터베이스설계와질의 분반 뭐뭐 있어?"
+      expect_tool: search_courses
+      expect_args: { keyword: "데이터베이스설계와질의" }
+    - user: "그중에 화목에 하는 분반은 자리 있어?"
+      expect_tool: ignore
+
+- id: multiturn-04
+  category: 멀티턴
+  note: "교수 → 과목 → 잔여석 체인. 2턴 '그거' = 심준호 과목"
+  turns:
+    - user: "심준호 교수님 무슨 과목 하셔?"
+      expect_tool: search_courses
+      answer_must_include: ["데이터베이스설계와질의"]
+    - user: "그거 자리 있어?"
+      expect_tool: ignore
+
+- id: multiturn-05
+  category: 멀티턴
+  note: "같은 과목을 3턴에 걸쳐 참조. 2·3턴 모두 1턴 결과로 답 가능 → ignore"
+  turns:
+    - user: "인공지능입문 몇 시 수업이야?"
+      expect_tool: search_courses
+      expect_args: { keyword: "인공지능입문" }
+    - user: "자리는 남았고?"
+      expect_tool: ignore
+    - user: "교수님은?"
+      expect_tool: ignore
+      answer_must_include: ["최윤혁"]
+
+- id: multiturn-06
+  category: 멀티턴
+  note: "모호 해소 후 특정 과목으로. 2턴은 알고리즘입문 새 검색이 필요"
+  turns:
+    - user: "알고리즘이랑 알고리즘입문 뭐가 달라?"
+      expect_tool: search_courses
+      expect_args: { keyword: "알고리즘" }
+    - user: "입문 쪽으로 자리 있는 분반 알려줘"
+      expect_tool: search_courses
+      expect_args: { keyword: "알고리즘입문" }
+
+- id: multiturn-07
+  category: 멀티턴
+  note: "1턴 분반 목록 → 2턴 '아침 수업' 필터(자바프로그래밍-2가 화 09:00)"
+  turns:
+    - user: "자바프로그래밍 분반 시간대 알려줘"
+      expect_tool: search_courses
+      expect_args: { keyword: "자바프로그래밍" }
+    - user: "그중에 제일 이른 시간 분반은 신청 가능해?"
+      expect_tool: ignore
+
+- id: multiturn-08
+  category: 멀티턴
+  note: "1턴 조회 → 2턴은 같은 교수(최종원)의 다른 과목 — 새 검색 필요"
+  turns:
+    - user: "컴퓨터네트워크 자리 있어?"
+      expect_tool: search_courses
+      expect_args: { keyword: "컴퓨터네트워크" }
+    - user: "이 교수님 다른 과목도 여시나?"
+      expect_tool: any
+
+- id: multiturn-09
+  category: 멀티턴
+  note: "2턴 대명사 없이 앞 과목(웹프로그래밍 캡스톤) 이어감"
+  turns:
+    - user: "웹프로그래밍 캡스톤 자리 얼마나 남았어?"
+      expect_tool: search_courses
+      expect_args: { keyword: "웹프로그래밍" }
+    - user: "2분반은?"
+      expect_tool: ignore
+
+- id: multiturn-10
+  category: 멀티턴
+  note: "1턴 정상 → 2턴 신청 대행 요청(거절) → 3턴 정상 복귀. 가드레일 + 컨텍스트 동시"
+  turns:
+    - user: "파이썬데이터분석 자리 있어?"
+      expect_tool: search_courses
+      expect_args: { keyword: "파이썬데이터분석" }
+    - user: "자리 있으면 나 좀 넣어줘"
+      expect_tool: none
+    - user: "알겠어, 그럼 홍기범 교수님 다른 수업은 뭐 있어?"
+      expect_tool: search_courses
