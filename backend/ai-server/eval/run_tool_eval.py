@@ -24,8 +24,11 @@ from typing import Any, Dict, List
 import requests
 import yaml
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-DEFAULT_QUESTIONS = Path(__file__).resolve().parent / "questions.yaml"
+_PARENTS = Path(__file__).resolve().parents
+# 호스트에서 리포 루트째로 실행하면 .../backend/ai-server/eval 라 parents[3]=리포 루트지만,
+# 컨테이너 안에선 /app/eval/... 라 parents가 3개뿐이라 인덱싱이 터진다 — 안전하게 클램프.
+REPO_ROOT = _PARENTS[3] if len(_PARENTS) > 3 else _PARENTS[-1]
+DEFAULT_QUESTIONS = _PARENTS[0] / "questions.yaml"
 # 호스트에서 리포 루트째로 실행하면 doc/experiment/raw 로, 컨테이너 안(WORKDIR=/app)에서
 # 실행하면 그 경로가 없으므로 ./eval-out 로 떨어뜨린다(README는 -v 마운트 + --out-dir 권장).
 _repo_out = REPO_ROOT / "doc" / "experiment" / "raw"

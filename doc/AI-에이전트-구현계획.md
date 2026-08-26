@@ -31,8 +31,8 @@
 - [ ] 0-6. 테스트 질문 세트 1차 작성 + Tool 선택 정확도 측정 — 이슈 #74
   - [x] 측정 하네스 `backend/ai-server/eval/`(질문 로드 → 에이전트 직접 호출(멀티턴) → tool_calls 캡처 → 자동 채점 → raw+요약), 채점 단위 테스트, 측정계획서 [`03-ai-tool-라우팅-정확도-측정계획.md`](experiment/03-ai-tool-라우팅-정확도-측정계획.md) — 지표: Tool 선택 정확도 / 파라미터 정확도 / 과잉·과소 호출 / 답변 정합성 / 안정성(5회 반복 sd) / latency / 토큰
   - [x] 질문 세트 `questions.yaml` — 70 시나리오(카테고리 7종×10), 82 turn. `seedData.js` 실측값 대조 라벨
-  - [ ] Gemini `gemini-3.6-flash`로 1회 실행 → `doc/experiment/03-결과.md` (baseline) + `doc/experiment/raw/`
-  - [ ] LLM 모델 선정(GPT/Claude/Gemini/Grok) — **별도 이슈**. 위 질문 세트/지표를 그대로 재사용해 `CHAT_MODEL` 스위프. 멀티 프로바이더 LangChain 분기 코드 설계부터. 선정 이유는 새 ADR
+  - [x] Gemini `gemini-3.6-flash` baseline 실측(2026-08-26, 5회 반복) → [`doc/experiment/03-결과.md`](experiment/03-결과.md) + raw. **Tool 선택 정확도 93.1%** (정보 조회 5개 카테고리 전부 100%, 할루시네이션 0건), 핵심 발견은 **범위 밖 요청(신청 대행·강의평)에 42% 과잉 Tool 호출** — Stage 3-1의 Before
+  - [ ] LLM 모델 선정(GPT/Claude/Gemini/Grok) — **별도 이슈**. 위 질문 세트/지표를 그대로 재사용해 `CHAT_MODEL` 스위프. 프로바이더 팩토리(LangChain 클래스 분기) 구현부터. `.env.docker`에 `OPENAI_API_KEY` 이미 있음. 선정 이유는 새 ADR
 
 ## Stage 1 — RAG 결합 (PDF 확보 후 착수, ~3~5일)
 
