@@ -30,7 +30,7 @@
   - 로컬 docker-compose로 수동 E2E 검증 완료(Tool 라우팅, 멀티턴 컨텍스트, 세션 소유자 403/404, 인증 401)
 - [ ] 0-6. 테스트 질문 세트 1차 작성 + Tool 선택 정확도 측정 — 이슈 #74
   - [x] 측정 하네스 `backend/ai-server/eval/`(질문 로드 → 에이전트 직접 호출(멀티턴) → tool_calls 캡처 → 자동 채점 → raw+요약), 채점 단위 테스트, 측정계획서 [`03-ai-tool-라우팅-정확도-측정계획.md`](experiment/03-ai-tool-라우팅-정확도-측정계획.md) — 지표: Tool 선택 정확도 / 파라미터 정확도 / 과잉·과소 호출 / 답변 정합성 / 안정성(5회 반복 sd) / latency / 토큰
-  - [ ] 질문 세트 25~30개 완성(사용자 초안 → 라벨 검수). 시드 예시 12개는 `questions.yaml`에 있음
+  - [x] 질문 세트 `questions.yaml` — 70 시나리오(카테고리 7종×10), 82 turn. `seedData.js` 실측값 대조 라벨
   - [ ] Gemini `gemini-3.6-flash`로 1회 실행 → `doc/experiment/03-결과.md` (baseline) + `doc/experiment/raw/`
   - [ ] LLM 모델 선정(GPT/Claude/Gemini/Grok) — **별도 이슈**. 위 질문 세트/지표를 그대로 재사용해 `CHAT_MODEL` 스위프. 멀티 프로바이더 LangChain 분기 코드 설계부터. 선정 이유는 새 ADR
 

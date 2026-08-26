@@ -64,10 +64,10 @@ Stage 0-5에서 구현한 에이전트(`create_agent` + Gemini, read-only Tool 2
 
 ## 5. 질문 세트 설계
 
-- **크기**: 1차 25~30 시나리오. 카테고리별로 고르게.
-- **작성 주체**: 사람이 손으로(ADR-010 §14 "1차 완전 수동"). 라벨(`expect_*`)은 검수를 거친다.
-- **형식**: `backend/ai-server/eval/questions.yaml` (스키마는 파일 상단 주석). 시나리오 = 대화 1개,
-  단일턴이면 turn 1개·멀티턴이면 여러 개.
+- **크기**: 1차 70 시나리오(카테고리 7종 × 10), 82 turn. `backend/ai-server/eval/questions.yaml`.
+- **작성 주체**: 수동 작성(ADR-010 §14 "1차 완전 수동"). 라벨(`expect_*`)은 `seedData.js` 실측값과 대조.
+- **형식**: 스키마는 파일 상단 주석. 시나리오 = 대화 1개, 단일턴이면 turn 1개·멀티턴이면 2~3개.
+- **turn별 기대 분포**: `search_courses` 52 / `get_course_by_code` 10 / `none` 12 / `ignore` 7 / `any` 1.
 
 | 카테고리 | 노리는 것 | 기대 |
 |---|---|---|
@@ -86,8 +86,9 @@ Stage 0-5에서 구현한 에이전트(`create_agent` + Gemini, read-only Tool 2
    `db` 볼륨을 초기화하고 다시 띄운다.
 2. `docker compose build ai-server` — `eval/` + `pyyaml` 반영
 3. `docker compose run --rm --no-deps -v "$PWD/doc/experiment/raw:/out" ai-server python -m eval.run_tool_eval --out-dir /out`
-   - 질문당 **5회 반복**(기존 실험 패턴). 시나리오 ~28개 × 평균 1.3 turn × 5 ≈ 180 invoke.
-   - invoke당 최대 2회 LLM 호출(Tool 호출 + 최종 답변). rate limit 시 자동 backoff 재시도.
+   - 질문당 **5회 반복**(기존 실험 패턴). 82 turn × 5 = 410 invoke, invoke당 최대 2회 LLM 호출
+     (Tool 호출 + 최종 답변) ≈ 600~800 Gemini 호출. rate limit 시 자동 backoff 재시도.
+   - 1차 감을 잡을 땐 `--reps 3` 또는 `--limit`으로 축소 실행 후 전체 5회.
 4. 산출물
    - `doc/experiment/raw/03-tool-eval-<model>-<ts>.jsonl` — turn별 원본(질문/tool_calls/답변/latency/토큰/점수)
    - `doc/experiment/raw/03-tool-eval-<model>-<ts>-summary.json` — 집계
