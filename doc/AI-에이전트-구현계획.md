@@ -28,7 +28,11 @@
   - `POST /api/ai/chat`(비-스트리밍) — LangChain(`langchain-google-genai`의 `ChatGoogleGenerativeAI` + `create_agent`) 기반 Tool 호출 루프. read-only Tool 2개 연동: `search_courses`(잔여석/키워드 검색, `GET /api/courses`), `get_course_by_code`(과목 단건 조회, 0-3) — 대기열 순번은 Tool 인벤토리에서 제외됨(ADR-010 §8). 착수 첫날 `AgentExecutor`/`create_tool_calling_agent`가 LangChain 1.x에서 완전히 제거된 걸 확인해 `create_agent`로 전환(ADR-010 §12 2026-08-23 재검토). 턴당 호출 상한은 `recursion_limit`, Tool 에러는 `create_agent` 내부 `ToolNode` 기본 동작으로 처리. 응답 완료 후 자기 소유 `db-chat`에 직접 기록(Node 왕복 없음), `redis-chat`을 작업 메모리 캐시로 사용(ADR-010 §10, 캐시 미스 시 MySQL 웜업)
   - `GET /api/ai/sessions`/`GET /api/ai/sessions/:id/messages` — Node가 넘긴 `user_id`로 `db-chat`을 직접 쿼리, 세션 소유자 검증(IDOR 방지) 포함 (ADR-010 §7/§8/§10/§12)
   - 로컬 docker-compose로 수동 E2E 검증 완료(Tool 라우팅, 멀티턴 컨텍스트, 세션 소유자 403/404, 인증 401)
-- [ ] 0-6. 테스트 질문 세트 1차 작성(예: "이번 학기 데이터베이스 관련 과목 뭐 있어?", "CS301 몇 명 남았어?") + Tool 선택 정확도 측정 — `doc/experiment/`에 원본 저장. LLM 모델 선정(GPT/Claude/Gemini/Grok 계열 비교)도 이 단계에서 같은 질문 세트로 진행 예정(`CHAT_MODEL` 등 환경변수만 바꿔 반복 측정) — 방식은 착수 시 별도 확정
+- [ ] 0-6. 테스트 질문 세트 1차 작성 + Tool 선택 정확도 측정 — 이슈 #74
+  - [x] 측정 하네스 `backend/ai-server/eval/`(질문 로드 → 에이전트 직접 호출(멀티턴) → tool_calls 캡처 → 자동 채점 → raw+요약), 채점 단위 테스트, 측정계획서 [`03-ai-tool-라우팅-정확도-측정계획.md`](experiment/03-ai-tool-라우팅-정확도-측정계획.md) — 지표: Tool 선택 정확도 / 파라미터 정확도 / 과잉·과소 호출 / 답변 정합성 / 안정성(5회 반복 sd) / latency / 토큰
+  - [ ] 질문 세트 25~30개 완성(사용자 초안 → 라벨 검수). 시드 예시 12개는 `questions.yaml`에 있음
+  - [ ] Gemini `gemini-3.6-flash`로 1회 실행 → `doc/experiment/03-결과.md` (baseline) + `doc/experiment/raw/`
+  - [ ] LLM 모델 선정(GPT/Claude/Gemini/Grok) — **별도 이슈**. 위 질문 세트/지표를 그대로 재사용해 `CHAT_MODEL` 스위프. 멀티 프로바이더 LangChain 분기 코드 설계부터. 선정 이유는 새 ADR
 
 ## Stage 1 — RAG 결합 (PDF 확보 후 착수, ~3~5일)
 

@@ -7,7 +7,7 @@ Node가 authMiddleware로 인증을 끝낸 뒤 x-user-id 신뢰 헤더를 붙여
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -15,6 +15,7 @@ from db.session import get_db
 
 from . import cache, store
 from .agent import RECURSION_LIMIT, get_agent
+from .message_utils import extract_text, extract_tool_calls
 
 router = APIRouter(prefix="/api/ai", tags=["chat"])
 
@@ -46,46 +47,6 @@ def _to_history_messages(raw_history: List[Dict[str, str]]):
         elif item["role"] == "assistant":
             messages.append(AIMessage(content=item["content"]))
     return messages
-
-
-def _extract_text(content: Any) -> str:
-    """최신 langchain-google-genai는 AIMessage.content를 항상 문자열로 주지 않고
-    [{"type": "text", "text": "..."}, ...] 같은 콘텐츠 블록 리스트로 줄 때가 있다
-    (Gemini 3.x 응답 형식). MySQL TEXT 컬럼에 쓰려면 순수 문자열로 평탄화해야 한다."""
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        parts = []
-        for block in content:
-            if isinstance(block, str):
-                parts.append(block)
-            elif isinstance(block, dict) and block.get("type") == "text":
-                parts.append(block.get("text", ""))
-        return "".join(parts)
-    return str(content)
-
-
-def _extract_tool_calls(new_messages) -> List[Dict[str, Any]]:
-    """create_agent(langchain 1.x)의 invoke 결과 중 이번 호출에서 새로 생긴 메시지만
-    받아, AIMessage.tool_calls와 매칭되는 ToolMessage.content(관측값)를 묶어
-    감사 기록용으로 직렬화한다(ADR-010 §14 eval 데이터 원본)."""
-    observations: Dict[str, Any] = {}
-    for message in new_messages:
-        if isinstance(message, ToolMessage):
-            observations[message.tool_call_id] = message.content
-
-    calls: List[Dict[str, Any]] = []
-    for message in new_messages:
-        if isinstance(message, AIMessage) and message.tool_calls:
-            for call in message.tool_calls:
-                calls.append(
-                    {
-                        "tool": call.get("name"),
-                        "tool_input": call.get("args"),
-                        "observation": observations.get(call.get("id")),
-                    }
-                )
-    return calls
 
 
 class ChatRequest(BaseModel):
@@ -136,8 +97,8 @@ def chat(
         raise HTTPException(status_code=502, detail=f"AI 응답 생성 중 오류가 발생했습니다: {exc}")
 
     new_messages = result["messages"][len(input_messages):]
-    answer = _extract_text(result["messages"][-1].content)
-    tool_calls = _extract_tool_calls(new_messages)
+    answer = extract_text(result["messages"][-1].content)
+    tool_calls = extract_tool_calls(new_messages)
 
     store.append_message(db, session.id, role="user", content=request.message)
     store.append_message(db, session.id, role="assistant", content=answer, tool_calls=tool_calls or None)

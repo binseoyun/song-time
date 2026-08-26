@@ -22,8 +22,8 @@
   - Stage 3(운영 고도화)는 전부 필수가 아님 — 2026-08-19 재검토로 [필수]/[권장]/[보류]로 재분류함 (구현계획 문서 참고). [보류] 항목은 아래 Phase 3 나머지·AWS/K8s 실배포와 함께 마지막 인프라 트랙에서 처리.
 - [ ] **로드맵 외 작업(진행 중)**: AI 에이전트 챗봇(RAG + Function Calling) — 기존 단발성 추천(`/recommend`)을 강의계획서 기반 근거 응답 + 실제 수강신청 보조까지 가능한 대화형 상담 에이전트로 확장하는 것. 새 기능이므로 위와 같은 원칙으로 **로드맵 외 작업**으로 분류한다.
   - 설계 완료(2026-08-20, 이슈 #51 종결): [ADR-010](ADR/ADR-010-AI-에이전트-챗봇-설계.md) — Vector DB는 Chroma로 확정(AWS S3 Vectors/Aurora+pgvector는 AWS 실배포 단계로 재검토 이월), 언어/서비스 배치(Python `ai-server` 확장, 상태는 Node가 소유), 임베딩 모델(`gemini-embedding-001`), PDF 파싱(`pdfplumber`)까지 전부 결정 완료.
-  - 구현계획: [doc/AI-에이전트-구현계획.md](AI-에이전트-구현계획.md) — Stage 0(Tool 라우팅 검증) → Stage 1(RAG 결합, PDF 확보 후) → Stage 2(write Tool+스트리밍+UI) → Stage 3(가드레일+최종 측정)
-  - 착수 순서: 실시간 수강신청 Stage 2/3 완료 후 착수 조건 충족(2026-08-20) — 다음은 `ADR-011`부터 사용.
+  - 구현계획: [doc/AI-에이전트-구현계획.md](AI-에이전트-구현계획.md) — Stage 0(Tool 라우팅 검증) → Stage 1(RAG 결합, PDF 확보 후) → Stage 2(스트리밍+UI) → Stage 3(가드레일+최종 측정). 설계 재검토로 write Tool은 배제됨(ADR-010 §9).
+  - 진행: Stage 0-1~0-5 완료·머지(인프라 분리 #66, 라우팅 뼈대 #68, `ai-server` 실제 엔드포인트 #70). Stage 0-6(Tool 라우팅 정확도 baseline 측정, 이슈 #74) 진행 중 — 측정 하네스·계획서([실험계획서 03](experiment/03-ai-tool-라우팅-정확도-측정계획.md)) 완료, 질문 세트 완성 후 실행.
 - [x] Phase 2. 동시성 개선 (진행 중) — 기존 `courseController.js`의 정원 초과 방지 로직 부재 문제(로드맵 P1)를 다룬다. 위 실시간 수강신청 신규 기능과는 별개 트랙.
   - [x] Group A(무방비)/B(비관적 락) API 구현 (#9, 2026-08-10)
   - [x] k6+Prometheus+Grafana 부하테스트 인프라 + 계정 시딩 스크립트 (#13, 2026-08-11)
