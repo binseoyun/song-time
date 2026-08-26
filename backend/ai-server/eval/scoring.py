@@ -54,7 +54,10 @@ def score_turn(expect: Dict[str, Any], tool_calls: List[Dict[str, Any]], answer:
         unexpected = [t for t in called if t != expect_tool]
     elif expect_tool == "any":
         unexpected = []
-    else:  # none / ignore
+    elif expect_tool == "ignore":
+        # Tool 차원을 안 보는 turn — 재호출도 정당하므로 unexpected로 잡지 않는다.
+        unexpected = []
+    else:  # none
         unexpected = list(called)
 
     # --- 파라미터 ---
@@ -125,13 +128,19 @@ def _percentile(sorted_vals: List[float], q: float) -> float:
 
 
 def _metric_block(turns: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """turn 결과 리스트(여러 rep 섞여 있어도 됨)에 대한 지표 묶음."""
-    scored = [t for t in turns if not t.get("error")]
+    """turn 결과 리스트(여러 rep 섞여 있어도 됨)에 대한 지표 묶음.
+
+    skipped turn(앞 turn 실패로 실행 안 된 후속)은 오류로 세지 않고 따로 집계한다 —
+    멀티턴 시나리오 하나가 turn 0에서 죽으면 실제 실패는 1건인데 n_errors가 여러 건으로
+    부풀던 문제를 막는다.
+    """
+    scored = [t for t in turns if not t.get("error") and not t.get("skipped")]
     latencies = sorted(t["latency_ms"] for t in scored if t.get("latency_ms") is not None)
     tokens = [t["tokens"]["total"] for t in scored if t.get("tokens")]
     return {
         "n_turns": len(turns),
-        "n_errors": sum(1 for t in turns if t.get("error")),
+        "n_errors": sum(1 for t in turns if t.get("error") and not t.get("skipped")),
+        "n_skipped": sum(1 for t in turns if t.get("skipped")),
         "tool_selection_accuracy": _mean([t["scores"]["tool_selection"] for t in scored]),
         "param_accuracy": _mean([t["scores"]["param_match"] for t in scored]),
         "answer_include_pass_rate": _mean([t["scores"]["answer_include"] for t in scored]),
@@ -158,9 +167,12 @@ def summarize(turn_results: List[Dict[str, Any]], n_reps: int, meta: Dict[str, A
       {rep, scenario_id, category, turn_index, user, answer, latency_ms,
        tokens{input,output,total} | None, error: bool, scores: score_turn(...) 출력}
     """
+    def _live(t: Dict[str, Any]) -> bool:
+        return not t.get("error") and not t.get("skipped")
+
     by_rep_acc: List[float] = []
     for rep in range(1, n_reps + 1):
-        rep_turns = [t for t in turn_results if t["rep"] == rep and not t.get("error")]
+        rep_turns = [t for t in turn_results if t["rep"] == rep and _live(t)]
         acc = _mean([t["scores"]["tool_selection"] for t in rep_turns])
         if acc is not None:
             by_rep_acc.append(acc)
@@ -179,15 +191,17 @@ def summarize(turn_results: List[Dict[str, Any]], n_reps: int, meta: Dict[str, A
     # scenario 단위 안정성: rep을 걸쳐 tool_selection이 전부 통과한 시나리오 비율
     scenario_ids = sorted({t["scenario_id"] for t in turn_results})
     fully_stable = 0
+    scored_scenarios = 0
     flaky = []
     for sid in scenario_ids:
         sid_turns = [
             t for t in turn_results
-            if t["scenario_id"] == sid and not t.get("error")
+            if t["scenario_id"] == sid and _live(t)
             and t["scores"]["tool_selection"] is not None
         ]
         if not sid_turns:
-            continue
+            continue  # 채점 가능한 turn이 하나도 없던 시나리오 — 분모에서 제외
+        scored_scenarios += 1
         passes = [t["scores"]["tool_selection"] for t in sid_turns]
         if all(passes):
             fully_stable += 1
@@ -202,7 +216,7 @@ def summarize(turn_results: List[Dict[str, Any]], n_reps: int, meta: Dict[str, A
         "by_category": by_category,
         "stability": {
             "scenarios_fully_passing_all_reps": fully_stable,
-            "scenarios_scored": len(scenario_ids),
+            "scenarios_scored": scored_scenarios,
             "flaky_scenarios": flaky,
         },
     }

@@ -32,7 +32,14 @@ _repo_out = REPO_ROOT / "doc" / "experiment" / "raw"
 DEFAULT_OUT_DIR = _repo_out if _repo_out.parent.is_dir() else Path.cwd() / "eval-out"
 
 VALID_EXPECT_TOOLS = {"search_courses", "get_course_by_code", "none", "any", "ignore"}
-RATE_LIMIT_MARKERS = ("429", "ResourceExhausted", "RESOURCE_EXHAUSTED", "quota")
+# str(exc)를 소문자로 낮춰 부분 매칭한다.
+RATE_LIMIT_MARKERS = ("429", "resourceexhausted", "resource_exhausted", "quota",
+                      "rate limit", "rate_limit", "ratelimit", "too many requests")
+
+
+def _is_rate_limit(err: str) -> bool:
+    low = err.lower()
+    return any(mark in low for mark in RATE_LIMIT_MARKERS)
 
 
 # --------------------------------------------------------------------------- #
@@ -68,6 +75,12 @@ def load_scenarios(path: Path) -> List[Dict[str, Any]]:
                 sys.exit(f"[오류] {tloc}: expect_tool={et!r} (허용: {sorted(VALID_EXPECT_TOOLS)})")
             if turn.get("expect_args") and not isinstance(turn["expect_args"], dict):
                 sys.exit(f"[오류] {tloc}: expect_args 는 매핑이어야 합니다.")
+            if "expect_args" in turn and et not in ("search_courses", "get_course_by_code"):
+                sys.exit(f"[오류] {tloc}: expect_args 는 expect_tool 이 구체 Tool일 때만 채점됩니다 "
+                         f"(현재 {et!r}).")
+            for field in ("answer_must_include", "answer_must_not_include"):
+                if field in turn and not isinstance(turn[field], list):
+                    sys.exit(f"[오류] {tloc}: {field} 는 리스트여야 합니다 (문자열 하나여도 [ ... ]).")
     return raw
 
 
@@ -105,11 +118,13 @@ def _sum_tokens(messages) -> Dict[str, int] | None:
 
 
 def run_scenario(agent, scenario: Dict[str, Any], rep: int, recursion_limit: int,
-                 retries: int, retry_wait: float) -> List[Dict[str, Any]]:
+                 retries: int, retry_wait: float, turn_sleep: float = 0.0) -> List[Dict[str, Any]]:
     """시나리오 1개(멀티턴 포함)를 rep회차로 1번 실행. turn 결과 리스트를 반환한다.
 
     production(router.py)과 동일하게 히스토리는 user/assistant 텍스트만 되재생한다
-    (ToolMessage는 다음 턴으로 넘기지 않음)."""
+    (ToolMessage는 다음 턴으로 넘기지 않음). 멀티턴 turn 사이에도 turn_sleep 만큼 쉰다 —
+    안 그러면 멀티턴 시나리오만 무텀 연타로 rate limit을 유발해 카테고리 baseline이
+    측정 아티팩트로 낮게 나온다."""
     from langchain_core.messages import AIMessage, HumanMessage
 
     from chat.message_utils import extract_text, extract_tool_calls
@@ -120,6 +135,8 @@ def run_scenario(agent, scenario: Dict[str, Any], rep: int, recursion_limit: int
     broken = False
 
     for idx, turn in enumerate(scenario["turns"]):
+        if idx > 0 and not broken and turn_sleep:
+            time.sleep(turn_sleep)
         base = {
             "rep": rep,
             "scenario_id": scenario["id"],
@@ -147,7 +164,7 @@ def run_scenario(agent, scenario: Dict[str, Any], rep: int, recursion_limit: int
                 break
             except Exception as exc:  # noqa: BLE001
                 err = str(exc)
-                if any(mark in err for mark in RATE_LIMIT_MARKERS) and attempt < retries:
+                if _is_rate_limit(err) and attempt < retries:
                     wait = retry_wait * (attempt + 1)
                     print(f"    · rate limit, {wait:.0f}s 대기 후 재시도 ({attempt + 1}/{retries})")
                     time.sleep(wait)
@@ -167,7 +184,8 @@ def run_scenario(agent, scenario: Dict[str, Any], rep: int, recursion_limit: int
         tool_calls = extract_tool_calls(new_messages)
         tokens = _sum_tokens(new_messages)
 
-        history = input_messages + [AIMessage(content=answer)]
+        # 다음 turn 히스토리엔 빈 문자열을 넣지 않는다 — Gemini가 빈 parts 메시지를
+        # 400으로 거절해 멀티턴 나머지가 통째로 날아가는 걸 막는다. 채점은 원본 answer로.
         results.append({
             **base,
             "error": None,
@@ -177,6 +195,7 @@ def run_scenario(agent, scenario: Dict[str, Any], rep: int, recursion_limit: int
             "tokens": tokens,
             "scores": score_turn(turn, tool_calls, answer),
         })
+        history = input_messages + [AIMessage(content=answer or "(빈 응답)")]
     return results
 
 
@@ -195,7 +214,7 @@ def print_summary(summary: Dict[str, Any]) -> None:
     print(f"  답변 제외 검사 통과   : {_pct(o['answer_exclude_pass_rate'])}")
     print(f"  과잉 호출(none 기대)  : {_rate_str(o['over_call'])}")
     print(f"  과소 호출(호출 기대)  : {_rate_str(o['under_call'])}")
-    print(f"  turn 오류             : {o['n_errors']}개")
+    print(f"  turn 오류 / 건너뜀    : {o['n_errors']} / {o['n_skipped']}개")
     print(f"  latency ms            : p50 {o['latency_ms']['p50']}  p95 {o['latency_ms']['p95']}  mean {o['latency_ms']['mean']}")
     print(f"  토큰                  : 총 {o['tokens']['total']}  turn당 평균 {o['tokens']['mean_per_turn']}")
     st = summary["stability"]
@@ -204,7 +223,8 @@ def print_summary(summary: Dict[str, Any]) -> None:
     print("-" * 68)
     print("  카테고리별 Tool 선택 정확도")
     for cat, block in summary["by_category"].items():
-        print(f"    {cat:<12} {_pct(block['tool_selection_accuracy'])}   (turn {block['n_turns']}, 오류 {block['n_errors']})")
+        print(f"    {cat:<12} {_pct(block['tool_selection_accuracy'])}   "
+              f"(turn {block['n_turns']}, 오류 {block['n_errors']}, 건너뜀 {block['n_skipped']})")
     print("=" * 68 + "\n")
 
 
@@ -256,9 +276,12 @@ def main() -> None:
     for rep in range(1, args.reps + 1):
         print(f"\n[rep {rep}/{args.reps}]")
         for sc in scenarios:
-            rows = run_scenario(agent, sc, rep, RECURSION_LIMIT, args.retries, args.retry_wait)
+            rows = run_scenario(agent, sc, rep, RECURSION_LIMIT, args.retries,
+                                args.retry_wait, turn_sleep=args.sleep)
             turn_results.extend(rows)
-            ok = sum(1 for r in rows if r["scores"]["tool_selection"] in (True, None) and not r.get("error"))
+            ok = sum(1 for r in rows
+                     if r["scores"]["tool_selection"] in (True, None)
+                     and not r.get("error") and not r.get("skipped"))
             print(f"  {sc['id']:<18} turn {len(rows)}  tool선택 {ok}/{len(rows)}")
             time.sleep(args.sleep)
 

@@ -74,6 +74,11 @@ class ScoreTurnTest(unittest.TestCase):
         self.assertIsNone(s["tool_selection"])
         self.assertTrue(s["answer_include"])
 
+    def test_ignore_tool_recall_is_not_unexpected(self):
+        # 멀티턴 후속에서 모델이 정당하게 Tool을 다시 불러도 unexpected로 잡지 않는다
+        s = score_turn({"expect_tool": "ignore"}, [_tc("search_courses", keyword="알고리즘")], "…")
+        self.assertEqual(s["unexpected_tools"], [])
+
     def test_answer_exclude(self):
         s = score_turn(
             {"expect_tool": "any", "answer_must_not_include": ["CS999"]},
@@ -135,6 +140,19 @@ class SummarizeTest(unittest.TestCase):
         summary = summarize(rows, n_reps=1, meta={})
         self.assertEqual(summary["overall"]["n_errors"], 1)
         self.assertEqual(summary["overall"]["tool_selection_accuracy"], 1.0)  # 오류 turn 제외
+
+    def test_skipped_turns_not_counted_as_errors(self):
+        # 멀티턴 turn0 실패 → turn1은 skipped. 실패는 1건, skipped는 1건이어야
+        t0 = _turn(1, "mt", "멀티턴", {"expect_tool": "search_courses"}, [], error="boom")
+        t1 = _turn(1, "mt", "멀티턴", {"expect_tool": "ignore"}, [], answer="")
+        t1["error"] = "이전 turn 실패로 건너뜀"
+        t1["skipped"] = True
+        summary = summarize([t0, t1], n_reps=1, meta={})
+        self.assertEqual(summary["overall"]["n_errors"], 1)
+        self.assertEqual(summary["overall"]["n_skipped"], 1)
+        self.assertEqual(summary["overall"]["n_turns"], 2)
+        # 채점 가능한 turn이 하나도 없으니 안정성 분모에서 빠진다
+        self.assertEqual(summary["stability"]["scenarios_scored"], 0)
 
 
 if __name__ == "__main__":
