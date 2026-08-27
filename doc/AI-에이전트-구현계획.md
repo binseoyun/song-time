@@ -42,13 +42,13 @@
   - 완전히 고정된 숙명 양식(섹션 1~8, 8번=주차별 표, 1번=개요 산문). 의미검색용 본문이 얇음(과목당 ~250토큰)
   - **과목당 1청크**, 분반 병합/분리는 본문 해시로(알고리즘 001/002 병합, 경영정보시스템 001/002 분리). 19파일 → 17청크
   - 임베딩 본문 = 메타 헤더 + 개요 + 목표 + 선수과목 + 강의방법 + 주차별 주제. 오버랩 0
-  - 구조화 필드(평가·주교재·선수과목·이메일·강의형태)는 **Chroma 메타데이터**(별도 SQL 테이블 없음). `get_syllabus`가 `where` 필터로 정확 조회
+  - 구조화 필드(평가·주교재·선수과목·이메일·강의형태)는 **벡터 DB 페이로드(메타데이터)**(별도 SQL 테이블 없음). `get_syllabus`가 페이로드 필터로 정확 조회
   - RAG Tool 1개 → **2개**(`search_syllabus` 유사도 / `get_syllabus` 정확 조회) — ADR-010 §8 갱신
   - PDF 없는 과목 → "강의계획서 미등록" 답변 + Tool 정보만
   - eval 라벨: `backend/ai-server/eval/rag_questions.yaml` (의미검색 / 미등록 negative / 범위밖)
   - 설계 상세: Notion "AI 챗봇 RAG 결합 (Stage 1) — 강의계획서 데이터셋 설계"
 - [ ] (별도 이슈) `Class` 테이블 재시딩 — Notion 강의목록 → Node `seedData.js` + `ClassSchedule`. 현재 seed(92과목)는 syllabi 16과목과 다른 세트. 1-1 다음, 1-2 전. RAG와 코드 소유가 분리돼 별도 PR
-- [ ] 1-2. `pdfplumber` 파싱 파이프라인 + `gemini-embedding-001` 임베딩 + Chroma 적재 스크립트 — 완전 수동 실행(관리자 UI 없음), wipe-and-reload, 재적재 전 `ai-server` 컨테이너 정지 (ADR-010 §4). `--dry-run`(파싱 결과만 출력)·적재 후 요약·`inspect_chroma.py`(list/show/query) 검증 장치 포함
+- [ ] 1-2. 강의계획서 → `gemini-embedding-001` 비대칭 임베딩(`RETRIEVAL_DOCUMENT`) → **Qdrant** 적재 스크립트 (ADR-010 §4 재검토로 Chroma→Qdrant, 이슈 #91). `docker-compose.yml`에 `qdrant` 서비스 + volume 추가, `requirements.txt`에 `qdrant-client`. 완전 수동 실행, wipe-and-reload(`recreate_collection` 또는 alias 스왑). `--dry-run`(파싱 결과만)·적재 후 요약·`inspect_qdrant.py`(list/show/query) 검증 장치. **파싱 방식(pdfplumber 파이프라인 vs 수기 `syllabi.yaml`)은 착수 시 확정** (§6 관련, 논의 중)
 - [ ] 1-3. `search_syllabus`·`get_syllabus`를 `chat/tools.py`의 `TOOLS`에 추가 + `agent.py` 시스템 프롬프트에 "정확한 값 질문에는 강의계획서 검색 안 씀" + "미등록 과목은 지어내지 않음" 명시(ADR-010 §8) — #82(#85) 머지 완료로 착수 가능
 - [ ] 1-4. RAG 검색 hit rate 측정(정답 과목코드가 top-k 안에 들어오는 비율) + naive 베이스라인(전체 강의계획서 프롬프트 주입) Before/After — `doc/experiment/`에 원본 저장. **재시딩 선행 필요**
 
