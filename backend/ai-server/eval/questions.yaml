@@ -1,12 +1,17 @@
 # =============================================================================
 # AI 챗봇 Tool 라우팅 정확도 — 질문 세트 (이슈 #74, ADR-010 §8/§14)
 # =============================================================================
-# 카테고리 7종 x 10개 = 70 시나리오. 라벨(expect_*)은 seedData.js(2026-08-26) 대조.
+# 74 시나리오. 라벨(expect_*)은 seedData.js(2026-08-26) 대조. #82에서 과목검색 +2,
+# #86에서 잔여석 +2(실시간 신청자 수 / 관심 등록 수 분리, ADR-013).
 #
 # 에이전트 Tool 2개 (RAG는 Stage 1에서 추가):
-#   search_courses(keyword)   : 과목명/학과명에 keyword가 든 과목들의 잔여석 목록
-#                               (전 과목 department가 '컴퓨터공학' 한 값이라 사실상 과목명 매칭만 유효)
-#   get_course_by_code(code)  : 과목 코드로 단건 상세(교수/시간표/잔여석)
+#   search_courses(keyword)   : 과목명/학과명/교수명에 keyword가 든 과목 목록.
+#                               각 과목에 remaining_seats(실시간 잔여석·Redis),
+#                               registered_count(실시간 신청자 수), interest_count(관심 등록 수).
+#   get_course_by_code(code)  : 과목 코드로 단건 상세(교수/시간표/좌석)
+#
+# 잔여석/분반비교 시나리오는 실시간 좌석(Redis)을 기준으로 하며, 재현 시
+#   seedAllClassSeats.js → seedBenchmarkSeats.js 순으로 실행한다(ADR-013).
 #
 # -----------------------------------------------------------------------------
 # 스키마
@@ -236,7 +241,7 @@
 
 - id: seats-01
   category: 잔여석
-  note: "클라우드시스템 잔여 1"
+  note: "클라우드시스템(21003735-1) 실시간 잔여석 8 (픽스처, ADR-013). 구 방식(cap-enrolled=1)과 다름"
   turns:
     - user: "클라우드시스템 지금 신청 가능해?"
       expect_tool: search_courses
@@ -244,11 +249,13 @@
 
 - id: seats-02
   category: 잔여석
-  note: "독일어Ⅰ 잔여 0 (40/40) — 마감됐다고 답해야. answer 체크는 변동성 때문에 뺌"
+  note: "독일어Ⅰ(21000203-1) 실시간 잔여석 15 (픽스처). 구 챗봇은 cap-enrolled=0이라 '0석/신청 불가'라 답했음 — ADR-013 대표 회귀 케이스"
   turns:
-    - user: "독일어1 아직 자리 있어?"
+    - user: "독일어 수업 아직 자리 있어?"
       expect_tool: search_courses
       expect_args: { keyword: "독일어" }
+      answer_must_include: ["15"]
+      answer_must_not_include: ["마감", "0석", "불가능", "신청할 수 없"]
 
 - id: seats-03
   category: 잔여석
@@ -268,11 +275,12 @@
 
 - id: seats-05
   category: 잔여석
-  note: "데이터마이닝및분석 잔여 9"
+  note: "데이터마이닝및분석(21102905-1) 실시간 잔여석 60 (픽스처). 구 방식 cap-enrolled=9 — 오차 51석"
   turns:
     - user: "데이터마이닝및분석 자리 남았어?"
       expect_tool: search_courses
       expect_args: { keyword: "데이터마이닝" }
+      answer_must_include: ["60"]
 
 - id: seats-06
   category: 잔여석
@@ -284,11 +292,12 @@
 
 - id: seats-07
   category: 잔여석
-  note: "소프트웨어공학 잔여 14"
+  note: "소프트웨어공학(21000555-1) 실시간 잔여석 23 (픽스처). 구 방식 cap-enrolled=14"
   turns:
     - user: "소프트웨어공학 자리 넉넉한 편이야?"
       expect_tool: search_courses
       expect_args: { keyword: "소프트웨어공학" }
+      answer_must_include: ["23"]
 
 - id: seats-08
   category: 잔여석
@@ -300,11 +309,30 @@
 
 - id: seats-09
   category: 잔여석
-  note: "네트워크보안 잔여 4"
+  note: "네트워크보안(21002031-1) 실시간 잔여석 17 (픽스처). 구 방식 cap-enrolled=3"
   turns:
     - user: "네트워크보안 몇 명이나 더 받을 수 있어?"
       expect_tool: search_courses
       expect_args: { keyword: "네트워크보안" }
+      answer_must_include: ["17"]
+
+- id: seats-11
+  category: 잔여석
+  note: "실시간 신청자 수 vs 관심 등록 수 분리(ADR-013). 자바프로그래밍 2분반(21000557-2): 정원 40, 픽스처 잔여석 4 → 신청자 36. 구 챗봇은 registered_count 개념이 없어 enrolled(37)로 답함(≠36)"
+  turns:
+    - user: "자바프로그래밍 창병모 교수님 말고 다른 분반, 지금 몇 명 신청했어?"
+      expect_tool: search_courses
+      expect_args: { keyword: "자바프로그래밍" }
+      answer_must_include: ["36"]
+
+- id: seats-12
+  category: 잔여석
+  note: "관심 등록(좋아요) 질문은 interest_count로. 자바프로그래밍 전 분반 course_interests 0 → '관심 등록 없음'. 구 챗봇은 interest_count 개념이 없어 '확인 불가'로 거절(Tool 호출 안 함) → under-call"
+  turns:
+    - user: "자바프로그래밍 분반들 좋아요(관심 등록) 몇 개씩 눌렸어?"
+      expect_tool: search_courses
+      expect_args: { keyword: "자바프로그래밍" }
+      answer_must_not_include: ["25명이 관심", "36명이 관심", "12명이 관심"]
 
 - id: seats-10
   category: 잔여석
@@ -317,10 +345,12 @@
 
 
 # ===== 분반비교: 동명 과목이 여러 분반, 비교/선택을 요구 (search_courses) =====
+# 잔여석 수치는 실시간(Redis). section-01/02/04/06은 seedBenchmarkSeats.js 픽스처 기준,
+# 나머지는 seedAllClassSeats.js 직후 값(대부분 정원=잔여석). 채점은 Tool 선택만 본다.
 
 - id: section-01
   category: 분반비교
-  note: "데이터베이스설계와질의 3분반 잔여 20/2/19 → 21003183-1"
+  note: "데이터베이스설계와질의 3분반 실시간 잔여 40/3/22 (픽스처) → 21003183-1"
   turns:
     - user: "데이터베이스설계와질의 분반 중에 자리 제일 많은 거 뭐야?"
       expect_tool: search_courses
@@ -328,7 +358,7 @@
 
 - id: section-02
   category: 분반비교
-  note: "자바프로그래밍 3분반 잔여 20/3/1 → 21000557-1 (창병모)"
+  note: "자바프로그래밍 3분반 실시간 잔여 25/4/12 (픽스처) → 21000557-1 (창병모)"
   turns:
     - user: "자바프로그래밍 여러 개던데 그중에 자리 많은 분반으로 알려줘"
       expect_tool: search_courses
@@ -336,7 +366,7 @@
 
 - id: section-03
   category: 분반비교
-  note: "keyword '알고리즘'이 알고리즘입문까지 매칭 — 모델이 알고리즘(2분반, 둘 다 15)에 집중해야"
+  note: "keyword '알고리즘'이 알고리즘입문까지 매칭 — 모델이 알고리즘(2분반)에 집중해야"
   turns:
     - user: "알고리즘 두 분반 자리 차이 있어?"
       expect_tool: search_courses
@@ -344,7 +374,7 @@
 
 - id: section-04
   category: 분반비교
-  note: "컴퓨터수학 3분반 잔여 44/6/20"
+  note: "컴퓨터수학 3분반 실시간 잔여 30/12/4 (픽스처)"
   turns:
     - user: "컴퓨터수학 분반별로 자리 어떻게 돼?"
       expect_tool: search_courses
@@ -352,7 +382,7 @@
 
 - id: section-05
   category: 분반비교
-  note: "프로그래밍개론 3분반 잔여 5/21/1 — 오전(월수11:00, 화목15:00)/오후(월수14:00)"
+  note: "프로그래밍개론 3분반 — 오전(월수11:00, 화목15:00)/오후(월수14:00)"
   turns:
     - user: "프로그래밍개론 오전 분반이랑 오후 분반 중에 어디가 자리 많아?"
       expect_tool: search_courses
@@ -360,7 +390,7 @@
 
 - id: section-06
   category: 분반비교
-  note: "공학수학I 3분반 잔여 13/32/8 → 21102525-2"
+  note: "공학수학I 3분반 실시간 잔여 8/40/2 (픽스처) → 21102525-2"
   turns:
     - user: "공학수학1 어느 분반이 제일 여유 있어?"
       expect_tool: search_courses
@@ -613,14 +643,13 @@
 
 - id: multiturn-06
   category: 멀티턴
-  note: "모호 해소 후 특정 과목으로. 2턴은 알고리즘입문 새 검색이 필요"
+  note: "모호 해소 후 특정 과목으로. 2턴은 알고리즘입문 좌석 재조회 — search_courses(알고리즘입문) 또는 1턴 결과의 분반 코드로 get_course_by_code 둘 다 정답(#86에서 flash-lite가 후자로 이동, 답변은 정확). Tool을 부르기만 하면 됨"
   turns:
     - user: "알고리즘이랑 알고리즘입문 뭐가 달라?"
       expect_tool: search_courses
       expect_args: { keyword: "알고리즘" }
     - user: "입문 쪽으로 자리 있는 분반 알려줘"
-      expect_tool: search_courses
-      expect_args: { keyword: "알고리즘입문" }
+      expect_tool: any
 
 - id: multiturn-07
   category: 멀티턴

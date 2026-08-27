@@ -24,7 +24,10 @@
   - 설계 완료(2026-08-20, 이슈 #51 종결): [ADR-010](ADR/ADR-010-AI-에이전트-챗봇-설계.md) — Vector DB는 Chroma로 확정(AWS S3 Vectors/Aurora+pgvector는 AWS 실배포 단계로 재검토 이월), 언어/서비스 배치(Python `ai-server` 확장, 상태는 Node가 소유), 임베딩 모델(`gemini-embedding-001`), PDF 파싱(`pdfplumber`)까지 전부 결정 완료.
   - 구현계획: [doc/AI-에이전트-구현계획.md](AI-에이전트-구현계획.md) — Stage 0(Tool 라우팅 검증) → Stage 1(RAG 결합, PDF 확보 후) → Stage 2(스트리밍+UI) → Stage 3(가드레일+최종 측정). 설계 재검토로 write Tool은 배제됨(ADR-010 §9).
   - 진행: Stage 0-1~0-5 완료·머지(인프라 분리 #66, 라우팅 뼈대 #68, `ai-server` 실제 엔드포인트 #70). Stage 0-6(Tool 라우팅 정확도 baseline, 이슈 #74) — 측정 하네스·계획서·질문 세트 70개 완료, **Gemini baseline 실측 완료**([결과](experiment/03-결과.md)): Tool 선택 정확도 93.1%, 정보 조회는 견고(할루시네이션 0건), 범위 밖 요청에 42% 과잉 호출이 Stage 3-1 Before. 모델 비교 7종 완료 → `gemini-3.1-flash-lite` 선정([ADR-012](ADR/ADR-012-챗봇-LLM-모델-선정.md), #78/#80).
-  - **Stage 2(스트리밍+UI) 완료(2026-08-27, 이슈 #83)**: `POST /api/ai/chat`을 SSE로 전환(`agent.stream`, nginx/Node/ai-server 3중 버퍼링 해제), `ai-server` 호스트 포트 노출 제거(ADR-010 §11). 프론트 "AI 상담 챗봇" 새 탭 — 읽기 전용 상담 UI, 세션 목록·멀티턴. → [리팩토링 02](refactoring/02-챗봇-SSE-스트리밍-전환-및-채팅-UI.md). 다음은 Stage 3(가드레일 #82 + 최종 측정).
+  - **Stage 2(스트리밍+UI) 완료(2026-08-27, 이슈 #83)**: `POST /api/ai/chat`을 SSE로 전환(`agent.stream`, nginx/Node/ai-server 3중 버퍼링 해제), `ai-server` 호스트 포트 노출 제거(ADR-010 §11). 프론트 "AI 상담 챗봇" 새 탭 — 읽기 전용 상담 UI, 세션 목록·멀티턴. → [리팩토링 02](refactoring/02-챗봇-SSE-스트리밍-전환-및-채팅-UI.md).
+  - **Stage 3-1(프롬프트/Tool 고도화) 완료(2026-08-27, 이슈 #82)**: `search_courses` professor 매칭 + 노이즈 토큰 흡수, 시스템 프롬프트 거절 범위 명시. 답변 포함 검사 77.8→100%, 회귀 없음. → [실험 03 프롬프트개선](experiment/03-프롬프트개선-before-after.md).
+  - **Stage 3-1b(좌석 데이터 소스 단일화) 완료(2026-08-27, 이슈 #86, [ADR-013](ADR/ADR-013-좌석-데이터-소스-단일화.md))**: 챗봇 "잔여석"이 `capacity - enrolled`(관심과목 하트 수 기반, 실시간 수강신청과 무관)였던 버그. `/api/courses`가 Redis 실시간 좌석 + `course_interests` 수를 응답에 싣고, 챗봇이 실시간 잔여석/신청자 수/관심 등록 수 3개를 분리해 답하도록 수정. → [실험 03 §8](experiment/03-프롬프트개선-before-after.md).
+  - 다음은 Stage 3-3(가드레일 전/후 최종 측정).
 - [x] Phase 2. 동시성 개선 (진행 중) — 기존 `courseController.js`의 정원 초과 방지 로직 부재 문제(로드맵 P1)를 다룬다. 위 실시간 수강신청 신규 기능과는 별개 트랙.
   - [x] Group A(무방비)/B(비관적 락) API 구현 (#9, 2026-08-10)
   - [x] k6+Prometheus+Grafana 부하테스트 인프라 + 계정 시딩 스크립트 (#13, 2026-08-11)

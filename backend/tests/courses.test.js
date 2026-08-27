@@ -1,15 +1,22 @@
 const request = require('supertest');
+const redis = require('../src/config/redis');
+const { classSeatsKey } = require('../src/utils/redisKeys');
 const { app, resetDatabase, closeDatabase, signupUser, createClass } = require('./helpers');
 
 let token;
 
 beforeAll(async () => {
   await resetDatabase();
-  await createClass({ id: 'C001', code: 'CS101', name: '자료구조' });
-  await createClass({ id: 'C002', code: 'CS102', name: '운영체제' });
+  await createClass({ id: 'C001', code: 'CS101', name: '자료구조' }); // capacity 30, enrolled 0
+  await createClass({ id: 'C002', code: 'CS102', name: '운영체제', capacity: 40 });
+  await redis.set(classSeatsKey('C001'), 7); // 실시간 잔여석 = 7 (cap-enrolled=30과 다름)
+  await redis.del(classSeatsKey('C002')); // 좌석 키 없음 → null
   ({ token } = await signupUser());
 });
-afterAll(closeDatabase);
+afterAll(async () => {
+  await redis.del(classSeatsKey('C001'), classSeatsKey('C002'));
+  await closeDatabase();
+});
 
 describe('GET /api/courses', () => {
   test('과목 목록을 반환한다 (인증 불필요)', async () => {
@@ -18,6 +25,24 @@ describe('GET /api/courses', () => {
     expect(res.status).toBe(200);
     expect(res.body).toHaveLength(2);
     expect(res.body[0]).toMatchObject({ id: 'C001', name: '자료구조' });
+  });
+
+  test('remainingSeats는 Redis 실시간 좌석이고 MySQL 컬럼값은 응답에서 빠진다 (ADR-013)', async () => {
+    const res = await request(app).get('/api/courses');
+    const c001 = res.body.find((c) => c.id === 'C001');
+    const c002 = res.body.find((c) => c.id === 'C002');
+
+    expect(c001.remainingSeats).toBe(7); // capacity-enrolled(5)가 아니라 Redis 값
+    expect(c001.interestCount).toBe(0);
+    expect(c002.remainingSeats).toBeNull(); // 좌석 키 없으면 null (capacity로 폴백 안 함)
+  });
+});
+
+describe('GET /api/courses/:code', () => {
+  test('단건 조회도 실시간 좌석/관심 등록 수를 포함한다', async () => {
+    const res = await request(app).get('/api/courses/CS101');
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ code: 'CS101', remainingSeats: 7, interestCount: 0 });
   });
 });
 
