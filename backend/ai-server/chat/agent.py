@@ -7,11 +7,15 @@
 StateGraph를 컴파일해 반환한다 — 애플리케이션 코드가 그래프를 직접 그리진 않지만,
 실행 엔진 자체는 이제 LangGraph다. §12가 "LangGraph는 과하다"고 판단했던 전제
 자체가 라이브러리 쪽에서 무너진 것이라, 이 결정을 뒤집는 게 아니라 현실을
-반영하는 재검토다."""
+반영하는 재검토다.
+
+모델 선택(이슈 #78): `build_llm(model)`이 모델명 prefix로 프로바이더별 LangChain
+채팅 클래스를 고른다. `create_agent`는 프로바이더-무관 인터페이스라, LLM만 바꿔
+끼우면 Tool 호출 루프는 그대로 동작한다.
+"""
 import os
 
 from langchain.agents import create_agent
-from langchain_google_genai import ChatGoogleGenerativeAI
 
 from .tools import TOOLS
 
@@ -23,7 +27,6 @@ SYSTEM_PROMPT = (
 )
 
 _CHAT_MODEL = os.getenv("CHAT_MODEL", "gemini-3.6-flash")
-_GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 # create_agent엔 max_iterations 파라미터가 없다 — LangGraph 실행 엔진의
 # recursion_limit(agent.invoke의 config)으로 턴당 호출 상한을 건다(router.py).
 RECURSION_LIMIT = int(os.getenv("CHAT_MAX_ITERATIONS", "6")) * 2 + 1
@@ -31,10 +34,40 @@ RECURSION_LIMIT = int(os.getenv("CHAT_MAX_ITERATIONS", "6")) * 2 + 1
 _agent = None
 
 
+def build_llm(model: str):
+    """모델명 prefix로 프로바이더별 LangChain 채팅 모델을 만든다(이슈 #78).
+
+    - gemini*  : temperature=0을 넘긴다(gemini-3.6-flash 등 flash 계열은 고정 샘플링이라
+                 무시하고 UserWarning만 냄 — baseline 실행과 조건을 맞추려고 유지).
+    - gpt*     : GPT-5 계열은 temperature 커스터마이즈를 막으므로 아무것도 안 넘기고
+                 프로바이더 기본값(사실상 비결정)으로 둔다. gpt-4o 계열도 일관성을 위해 동일.
+    - claude*/grok* : 브랜치만 있고 의존성(langchain-anthropic/langchain-xai)은 미설치.
+                 실제 호출 시 ImportError로 "패키지를 깔라"고 알려준다.
+    """
+    if model.startswith(("gemini", "models/gemini")):
+        from langchain_google_genai import ChatGoogleGenerativeAI
+
+        return ChatGoogleGenerativeAI(
+            model=model, google_api_key=os.getenv("GEMINI_API_KEY"), temperature=0
+        )
+    if model.startswith(("gpt", "o1", "o3", "o4", "chatgpt")):
+        from langchain_openai import ChatOpenAI
+
+        return ChatOpenAI(model=model, api_key=os.getenv("OPENAI_API_KEY"))
+    if model.startswith("claude"):
+        from langchain_anthropic import ChatAnthropic  # requirements.txt에 아직 없음
+
+        return ChatAnthropic(model=model, api_key=os.getenv("ANTHROPIC_API_KEY"))
+    if model.startswith("grok"):
+        from langchain_xai import ChatXAI  # requirements.txt에 아직 없음
+
+        return ChatXAI(model=model, api_key=os.getenv("XAI_API_KEY"))
+    raise ValueError(f"지원하지 않는 CHAT_MODEL: {model!r} (gemini*/gpt*/claude*/grok*)")
+
+
 def get_agent():
     """요청마다 새로 만들면 비용이 커서 프로세스 내 싱글턴으로 재사용한다."""
     global _agent
     if _agent is None:
-        llm = ChatGoogleGenerativeAI(model=_CHAT_MODEL, google_api_key=_GEMINI_API_KEY, temperature=0)
-        _agent = create_agent(llm, TOOLS, system_prompt=SYSTEM_PROMPT)
+        _agent = create_agent(build_llm(_CHAT_MODEL), TOOLS, system_prompt=SYSTEM_PROMPT)
     return _agent

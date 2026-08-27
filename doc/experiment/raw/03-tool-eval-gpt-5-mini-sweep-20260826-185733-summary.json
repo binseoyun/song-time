@@ -1,0 +1,242 @@
+{
+  "meta": {
+    "model": "gpt-5-mini",
+    "started_at": "2026-08-26T18:57:33",
+    "finished_at": "2026-08-26T21:14:05",
+    "questions_file": "/app/eval/questions.yaml",
+    "backend": "http://backend_1:8000 (92과목)",
+    "recursion_limit": 13
+  },
+  "n_reps": 5,
+  "n_scenarios": 70,
+  "overall": {
+    "n_turns": 410,
+    "n_errors": 0,
+    "n_skipped": 0,
+    "tool_selection_accuracy": 0.8693,
+    "param_accuracy": 0.9963,
+    "answer_include_pass_rate": 0.7778,
+    "answer_exclude_pass_rate": 1.0,
+    "over_call": {
+      "rate": 0.4667,
+      "hit": 28,
+      "n": 60
+    },
+    "under_call": {
+      "rate": 0.0476,
+      "hit": 15,
+      "n": 315
+    },
+    "unexpected_tool_turns": 50,
+    "latency_ms": {
+      "p50": 14752.6,
+      "p95": 24277.4,
+      "mean": 14983.0
+    },
+    "tokens": {
+      "total": 776923,
+      "mean_per_turn": 1894.9
+    },
+    "tool_selection_accuracy_sd": 0.0112,
+    "tool_selection_accuracy_by_rep": [
+      0.88,
+      0.8667,
+      0.88,
+      0.8533,
+      0.8667
+    ]
+  },
+  "by_category": {
+    "과목검색": {
+      "n_turns": 50,
+      "n_errors": 0,
+      "n_skipped": 0,
+      "tool_selection_accuracy": 1.0,
+      "param_accuracy": 1.0,
+      "answer_include_pass_rate": 0.0,
+      "answer_exclude_pass_rate": null,
+      "over_call": null,
+      "under_call": {
+        "rate": 0.0,
+        "hit": 0,
+        "n": 50
+      },
+      "unexpected_tool_turns": 0,
+      "latency_ms": {
+        "p50": 16043.6,
+        "p95": 20686.7,
+        "mean": 16274.4
+      },
+      "tokens": {
+        "total": 122994,
+        "mean_per_turn": 2459.9
+      }
+    },
+    "멀티턴": {
+      "n_turns": 110,
+      "n_errors": 0,
+      "n_skipped": 0,
+      "tool_selection_accuracy": 0.7733,
+      "param_accuracy": 1.0,
+      "answer_include_pass_rate": 0.6667,
+      "answer_exclude_pass_rate": null,
+      "over_call": {
+        "rate": 0.8,
+        "hit": 8,
+        "n": 10
+      },
+      "under_call": {
+        "rate": 0.0615,
+        "hit": 4,
+        "n": 65
+      },
+      "unexpected_tool_turns": 23,
+      "latency_ms": {
+        "p50": 14262.2,
+        "p95": 25770.2,
+        "mean": 14710.1
+      },
+      "tokens": {
+        "total": 229002,
+        "mean_per_turn": 2081.8
+      }
+    },
+    "모호": {
+      "n_turns": 50,
+      "n_errors": 0,
+      "n_skipped": 0,
+      "tool_selection_accuracy": 0.88,
+      "param_accuracy": 1.0,
+      "answer_include_pass_rate": null,
+      "answer_exclude_pass_rate": null,
+      "over_call": null,
+      "under_call": {
+        "rate": 0.12,
+        "hit": 6,
+        "n": 50
+      },
+      "unexpected_tool_turns": 0,
+      "latency_ms": {
+        "p50": 14958.9,
+        "p95": 20842.0,
+        "mean": 15471.4
+      },
+      "tokens": {
+        "total": 92329,
+        "mean_per_turn": 1846.6
+      }
+    },
+    "범위밖": {
+      "n_turns": 50,
+      "n_errors": 0,
+      "n_skipped": 0,
+      "tool_selection_accuracy": 0.6,
+      "param_accuracy": null,
+      "answer_include_pass_rate": null,
+      "answer_exclude_pass_rate": null,
+      "over_call": {
+        "rate": 0.4,
+        "hit": 20,
+        "n": 50
+      },
+      "under_call": null,
+      "unexpected_tool_turns": 20,
+      "latency_ms": {
+        "p50": 15449.0,
+        "p95": 32465.9,
+        "mean": 16282.9
+      },
+      "tokens": {
+        "total": 78882,
+        "mean_per_turn": 1577.6
+      }
+    },
+    "분반비교": {
+      "n_turns": 50,
+      "n_errors": 0,
+      "n_skipped": 0,
+      "tool_selection_accuracy": 0.98,
+      "param_accuracy": 1.0,
+      "answer_include_pass_rate": null,
+      "answer_exclude_pass_rate": null,
+      "over_call": null,
+      "under_call": {
+        "rate": 0.02,
+        "hit": 1,
+        "n": 50
+      },
+      "unexpected_tool_turns": 3,
+      "latency_ms": {
+        "p50": 15532.3,
+        "p95": 24228.7,
+        "mean": 16312.3
+      },
+      "tokens": {
+        "total": 104682,
+        "mean_per_turn": 2093.6
+      }
+    },
+    "잔여석": {
+      "n_turns": 50,
+      "n_errors": 0,
+      "n_skipped": 0,
+      "tool_selection_accuracy": 1.0,
+      "param_accuracy": 0.98,
+      "answer_include_pass_rate": null,
+      "answer_exclude_pass_rate": 1.0,
+      "over_call": null,
+      "under_call": {
+        "rate": 0.0,
+        "hit": 0,
+        "n": 50
+      },
+      "unexpected_tool_turns": 2,
+      "latency_ms": {
+        "p50": 15193.2,
+        "p95": 24692.5,
+        "mean": 15578.3
+      },
+      "tokens": {
+        "total": 82370,
+        "mean_per_turn": 1647.4
+      }
+    },
+    "코드조회": {
+      "n_turns": 50,
+      "n_errors": 0,
+      "n_skipped": 0,
+      "tool_selection_accuracy": 0.9,
+      "param_accuracy": 1.0,
+      "answer_include_pass_rate": 1.0,
+      "answer_exclude_pass_rate": 1.0,
+      "over_call": null,
+      "under_call": {
+        "rate": 0.08,
+        "hit": 4,
+        "n": 50
+      },
+      "unexpected_tool_turns": 2,
+      "latency_ms": {
+        "p50": 10198.8,
+        "p95": 16897.1,
+        "mean": 10579.3
+      },
+      "tokens": {
+        "total": 66664,
+        "mean_per_turn": 1333.3
+      }
+    }
+  },
+  "stability": {
+    "scenarios_fully_passing_all_reps": 58,
+    "scenarios_scored": 70,
+    "flaky_scenarios": [
+      "ambiguous-10",
+      "multiturn-06",
+      "multiturn-10",
+      "oos-05",
+      "oos-09",
+      "section-03"
+    ]
+  }
+}
