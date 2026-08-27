@@ -242,6 +242,62 @@ def _rate_str(block):
 
 
 # --------------------------------------------------------------------------- #
+def rescore(raw_path: Path, questions_path: Path, out_dir: Path, label: str) -> None:
+    """저장된 turn 결과(jsonl)를 현재 questions.yaml 라벨로 다시 채점한다.
+
+    `scoring.py`는 순수 함수라 저장된 tool_calls/answer만으로 동일하게 채점된다.
+    Before/After 측정 후 라벨(expect_*, answer_must_*)을 정정했을 때, 모델을 다시
+    돌리지 않고 두 raw를 같은 기준으로 재집계하는 용도다(#82 ambiguous-08 정정과 동일).
+    """
+    from eval.scoring import score_turn, summarize
+
+    scenarios = load_scenarios(questions_path)
+    turn_by_key = {
+        (sc["id"], idx): turn
+        for sc in scenarios
+        for idx, turn in enumerate(sc["turns"])
+    }
+
+    rows: List[Dict[str, Any]] = []
+    reps: set = set()
+    missing: set = set()
+    with raw_path.open(encoding="utf-8") as fh:
+        for line in fh:
+            row = json.loads(line)
+            reps.add(row["rep"])
+            key = (row["scenario_id"], row["turn_index"])
+            turn = turn_by_key.get(key)
+            if turn is None:
+                missing.add(row["scenario_id"])
+                rows.append(row)
+                continue
+            if row.get("error") or row.get("skipped"):
+                row["scores"] = score_turn(turn, [], "")
+            else:
+                row["scores"] = score_turn(turn, row.get("tool_calls") or [], row.get("answer") or "")
+            rows.append(row)
+
+    if missing:
+        print(f"[경고] 현재 questions.yaml에 없는 시나리오(원본 점수 유지): {sorted(missing)}")
+
+    meta = {"model": "(rescore)", "source_raw": str(raw_path), "questions_file": str(questions_path)}
+    summary = summarize(rows, len(reps), meta)
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    tag = f"-{label}" if label else ""
+    stem = f"{raw_path.stem}-rescored{tag}-{stamp}"
+    (out_dir / f"{stem}.jsonl").write_text(
+        "\n".join(json.dumps(r, ensure_ascii=False) for r in rows) + "\n", encoding="utf-8")
+    (out_dir / f"{stem}-summary.json").write_text(
+        json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    print_summary(summary)
+    print(f"재채점 원본: {raw_path}")
+    print(f"재채점 결과: {out_dir / (stem + '-summary.json')}")
+
+
+# --------------------------------------------------------------------------- #
 def main() -> None:
     parser = argparse.ArgumentParser(description="AI 챗봇 Tool 라우팅 정확도 측정")
     parser.add_argument("--questions", type=Path, default=DEFAULT_QUESTIONS)
@@ -253,7 +309,14 @@ def main() -> None:
     parser.add_argument("--retry-wait", type=float, default=30.0, help="재시도 기본 대기 초")
     parser.add_argument("--limit", type=int, default=None, help="앞 N개 시나리오만 (스모크용)")
     parser.add_argument("--label", default="", help="파일명에 붙일 태그")
+    parser.add_argument("--rescore", type=Path, default=None,
+                        help="저장된 raw jsonl을 현재 questions.yaml 라벨로 재채점만 한다 "
+                             "(에이전트 호출 없음). Before/After 라벨 정정 시 사용.")
     args = parser.parse_args()
+
+    if args.rescore:
+        rescore(args.rescore, args.questions, args.out_dir, args.label)
+        return
 
     if args.model:
         os.environ["CHAT_MODEL"] = args.model

@@ -1,8 +1,8 @@
 # 실험 03 — Stage 3-1: 프롬프트/Tool 고도화 Before/After
 
 - 작성: 2026-08-27
-- 상태: **완료.** 1차(프롬프트+professor 필터) 재측정 → 실사용에서 노이즈 토큰 버그 발견 → 2차 수정 + 재측정(72문항×5회).
-- 관련: 이슈 #82, [ADR-010](../ADR/ADR-010-AI-에이전트-챗봇-설계.md) §8, [ADR-012](../ADR/ADR-012-챗봇-LLM-모델-선정.md), [모델 비교](03-모델비교.md), [baseline](03-결과.md)
+- 상태: **완료.** 1차(프롬프트+professor 필터) 재측정 → 실사용에서 노이즈 토큰 버그 발견 → 2차 수정 + 재측정(72문항×5회). §8: 좌석 데이터 소스 단일화(#86).
+- 관련: 이슈 #82·#86, [ADR-010](../ADR/ADR-010-AI-에이전트-챗봇-설계.md) §8, [ADR-012](../ADR/ADR-012-챗봇-LLM-모델-선정.md), [ADR-013](../ADR/ADR-013-좌석-데이터-소스-단일화.md), [모델 비교](03-모델비교.md), [baseline](03-결과.md)
 - 대상 모델: `gemini-3.1-flash-lite` (ADR-012 선정)
 - Notion: [실험 결과 보고서 06](https://app.notion.com/) *(작성 후 링크)*
 
@@ -295,5 +295,160 @@ description에도 "keyword에는 핵심어만 — '교수님'·'관련'·'수업
 
 ## 7. 다음 단계
 
-- RAG 결합(Stage 1-4): `search_courses`/`get_course_by_code` + RAG 3-Tool 체제에서 이 70문항 재실행. RAG Tool description에 "정확한 값(잔여석·시간표)에는 쓰지 않는다" 부정형 지시(ADR-010 §8) 반영
+- RAG 결합(Stage 1-4): `search_courses`/`get_course_by_code` + RAG 3-Tool 체제에서 이 74문항 재실행. RAG Tool description에 "정확한 값(잔여석·시간표)에는 쓰지 않는다" 부정형 지시(ADR-010 §8) 반영
 - Stage 3-3 최종 측정: 이 결과를 가드레일 "After"로 삼아 종합
+
+---
+
+# 8. 좌석 데이터 소스 단일화 (이슈 #86, ADR-013)
+
+- 작성: 2026-08-27
+- 관련: 이슈 #86, [ADR-013](../ADR/ADR-013-좌석-데이터-소스-단일화.md)
+
+## 8-1. 문제 — 챗봇이 "잔여석"을 관심과목 하트 수로 계산하고 있었다
+
+Stage 3-1(§1~7)을 끝내고 실사용 테스트 중 발견:
+
+| 질문 | 챗봇 답 (Before) | 실제 |
+|---|---|---|
+| "독일어Ⅰ 자리 있어?" | "자리가 없습니다 (잔여석 0)" | 실시간 잔여석 40 (전 좌석 비어 있음) |
+| "데이터마이닝및분석 자리 남았어?" | "9석" | 실시간 잔여석 132 |
+| "소프트웨어공학 자리 넉넉해?" | "14석 남음" | 실시간 잔여석 80 |
+
+### 근본 원인 — "수강 인원"을 뜻하는 값이 3개, 서로 다른 저장소
+
+| 개념 | 저장소 | 갱신 주체 | Before 챗봇 |
+|---|---|---|---|
+| 실시간 잔여석 | Redis `class:{id}:seats` | Group C 원자 연산(등록/취소) | ❌ 안 씀 |
+| 관심 등록(하트) 수 | MySQL `course_interests` 테이블 행 수 | `POST /api/courses/:id/interest` | ❌ 안 씀 |
+| 데모용 수강 현황 | MySQL `Class.enrolled` | 시드 하드코딩값 + 하트 토글이 `+1/−1` | ✅ `capacity - enrolled`로 잔여석 계산 |
+
+`chat/tools.py`의 `_remaining_seats()`가 `capacity - enrolled`였다. `enrolled`는 `seedData.js`에서 가짜 초기 수강 인원(44, 50, 88, …)으로 하드코딩되고, 그 위에 `courseController.toggleInterest`가 하트마다 `Class.increment('enrolled')`. Group C 실시간 수강신청은 이 값을 **전혀 건드리지 않는다**(코드 주석에 명시). 실시간 좌석의 유일한 진실은 Redis `class:{id}:seats`.
+
+### 오차 규모 (85개 실과목, `seedAllClassSeats.js` 직후 상태)
+
+| 지표 | 값 |
+|---|---|
+| `capacity - enrolled` ≠ 실시간 잔여석 | **85 / 85 (100%)** |
+| 평균 절대 오차 | **48.6석** |
+| 최대 오차 | 129석 (화공기초화학Ⅱ: Before 31 → 실제 160) |
+| Before가 잔여석을 **실제보다 적게** 봄(= "마감" 오답 위험) | 84 / 85 |
+
+`enrolled`가 데모 realism용으로 대부분 과목을 "70~90% 찬 것"처럼 시드해 뒀기 때문에, 챗봇은 거의 모든 과목을 실제보다 빡빡하게 답하고 있었다.
+
+## 8-2. 재설계 (ADR-013)
+
+**A안 — `GET /api/courses`·`/api/courses/:code`가 실시간 좌석을 응답에 싣는다.** 챗봇이 쓰는 공개 과목 API가 좌석에 대해 진실을 말하지 않는 것 자체가 문제. Node는 이미 Group C용 ioredis 클라이언트가 있어 추가 인프라 없음. (B: 별도 엔드포인트 신설, C: 서비스 토큰으로 인증 엔드포인트 호출 — 둘 다 기각, 근거는 ADR-013.)
+
+세부 결정:
+- **1-b**: 응답의 `remainingSeats` = "실시간 잔여석"(Redis) 하나의 의미로 통일. MySQL `Class.remainingSeats` 컬럼값(naive/pessimistic 실험용, Group C에서 갱신 안 됨)은 응답에서 제거. (읽는 프론트 코드 없음 — 확인 완료.)
+- **관심 등록 수**: `Class.enrolled`는 시드값이 섞여 못 씀 → `course_interests` 행 수(`GROUP BY COUNT`)를 `interestCount`로 응답에 추가.
+- **2-a**: 챗봇 Tool 출력에서 `enrolled` 제거. "수업 목록" 탭이 `enrolled/capacity`로 "정원 초과"를 표시하는 것과의 불일치는 별도 이슈(2-b).
+- **3-a**: Redis에 좌석 키 없으면 `remainingSeats: null` → 챗봇은 "확인 불가"로 답(폴백으로 `capacity` 안 씀).
+- **4-a**: 목록은 `MGET` 1회, 단건은 `GET` 1회. Redis 장애 시 좌석만 `null`, 200 응답(500 금지).
+
+## 8-3. 변경 내역
+
+### `backend/src/controllers/courseController.js`
+
+`seatSnapshot(classIds)` 헬퍼 신설 — Redis `MGET class:{id}:seats` + `course_interests` `GROUP BY COUNT`를 `Promise.all`로. 각각 실패 시 `null`/`[]`로 폴백(과목 메타 조회는 안 막음). `serializeCourse()`가 `course.toJSON()`에서 MySQL `remainingSeats`를 지우고 Redis 값 + `interestCount`를 덧붙임.
+
+### `backend/ai-server/chat/tools.py`
+
+`_remaining_seats()`(= `capacity - enrolled`) 삭제. `_summarize()` 출력에서 `enrolled` 제거, 3개 필드로 분리:
+
+| 키 | 값 | 답하는 질문 |
+|---|---|---|
+| `remaining_seats` | `remainingSeats`(Redis) or `null` | "자리 남았어?" |
+| `registered_count` | `capacity - remainingSeats` (Redis 값 있을 때만) | "몇 명 신청했어?" |
+| `interest_count` | `interestCount` | "좋아요 몇 개야? / 인기 많아?" |
+
+`search_courses`/`get_course_by_code` docstring에 3개 값 구분 명시.
+
+### `backend/ai-server/chat/agent.py` — 시스템 프롬프트
+
+```diff
++ "'잔여석'·'몇 명 신청'은 실시간 수강신청 기준값(remaining_seats·registered_count)으로 답하고, "
++ "'관심 등록'·'좋아요'·'인기'는 interest_count로 답한다 — 둘은 다른 값이니 섞지 않는다. "
++ "remaining_seats가 없으면 실시간 좌석 정보를 확인할 수 없다고 답한다. "
+```
+
+### 벤치마크 (`eval/questions.yaml` 72 → 74)
+
+- **신규 `seats-11`**: "자바프로그래밍 창병모 교수님 말고 다른 분반, 지금 몇 명 신청했어?" → `registered_count` 39 (`answer_must_include: ["39"]`). Before 챗봇은 `registered_count` 개념이 없어 `enrolled`(37)로 답 → 실패.
+- **신규 `seats-12`**: "자바프로그래밍 분반들 좋아요 몇 개씩?" → `interest_count`(전부 0). 신청자 수와 헷갈리면 실패(`answer_must_not_include: ["39명이 관심", …]`).
+- `seats-02`(독일어Ⅰ): `answer_must_not_include: ["마감", "자리가 없", …]` — Before는 `cap-enrolled=0`이라 "마감"이라 답함.
+- `seats-05`(데이터마이닝): `answer_must_include: ["60"]`. `seats-07`(소프트웨어공학): `["8"]`. `seats-09`(네트워크보안): `["17"]`.
+- 잔여석/분반비교 시나리오의 결정성을 위해 `backend/scripts/seedBenchmarkSeats.js` 추가 — questions.yaml이 참조하는 21개 과목에 고정 좌석 값 심음(`capacity - enrolled`와 의도적으로 다르게).
+
+### `backend/tests/courses.test.js`
+
+`remainingSeats`가 Redis 값이고 MySQL 컬럼값이 응답에서 빠지는지 + 좌석 키 없을 때 `null`(폴백 안 함) + 단건 조회 검증 추가.
+
+## 8-4. 스모크 검증 (라이브)
+
+| 질문 | Before | After |
+|---|---|---|
+| "독일어 수업 실시간 수강신청 자리 남았어?" | "자리가 없습니다" | "'독일어Ⅰ'(이주은 교수님) 실시간 잔여석은 40석입니다" |
+| "데이터베이스설계와질의 몇 명이나 신청했어? 좋아요는 몇 개야?" | (구분 못 함, `enrolled` 1개 값) | "21003183-1: 1명 신청, 관심 등록 1개 / -2: 0명, 0개 / -3: 0명, 0개" |
+| "자바프로그래밍 인기 많아? 좋아요 몇 개?" | — | "각 분반 관심 등록 수 모두 0개" (신청자 수와 분리) |
+
+## 8-5. Before/After 재측정 (`gemini-3.1-flash-lite`, 74문항 × 5회 = 430 turn)
+
+- **Before**: 이 커밋 전 `tools.py`(잔여석 = `capacity - enrolled`). API·좌석 픽스처는 After와 동일 — 구 `tools.py`가 Redis 값을 안 읽으므로 답변은 픽스처와 무관.
+- **After**: `tools.py` 3-필드 분리 + API 실시간 좌석 + 시스템 프롬프트.
+- 라벨은 최종본으로 통일해 양쪽 재채점(`--rescore`). `multiturn-06` 2턴은 `expect_tool: search_courses` → `any`로 완화(#86에서 flash-lite가 1턴 결과의 분반 코드로 `get_course_by_code`를 부르는 쪽으로 이동 — 답변은 정확, 두 경로 다 정답).
+- raw: `raw/03-tool-eval-gemini-3.1-flash-lite-before-86-20260827-114042.jsonl` / `...-after-86-20260827-120621.jsonl` (+ `-rescored-*-final-*`)
+
+| 지표 | Before | After | 변화 |
+|---|---|---|---|
+| Tool 선택 정확도 | 98.7% | **100%** | +1.3%p |
+| 파라미터 정확도 | 100% | 100% | 유지 |
+| **답변 포함 검사** | **73.7% (70/95)** | **100% (95/95)** | **+26.3%p** |
+| **답변 제외 검사** | **80.0% (20/25)** | **100% (25/25)** | **+20%p** |
+| 과잉 호출률 | 0% | 0% | 유지 |
+| 과소 호출률 | 1.5% (5/330) | **0%** | 해소 |
+| 전 rep 통과 시나리오 | 72/73 | **73/73** | +1 |
+| turn 오류 | 0 | 0 | 유지 |
+| latency p50 / p95 (ms) | 1,651 / 2,822 | 1,721 / 2,319 | p95 개선 |
+| turn당 토큰 (in / out) | 1,104 / 129 | 1,438 / 127 | in +334 |
+| 1,000 turn 비용 | $0.47 | $0.55 | +17% (gemini-3.6-flash의 1/6) |
+
+벤치마크는 72 → 74(`seats-11`/`seats-12` 추가). Before/After 모두 74문항.
+
+### Before가 틀렸던 시나리오 (전부 5/5 rep 일관)
+
+| 시나리오 | 질문 | Before 답 | 실제(Redis 픽스처) |
+|---|---|---|---|
+| `seats-02` | "독일어 수업 아직 자리 있어?" | "잔여석 0석, 신청 불가능" | 15석 |
+| `seats-05` | "데이터마이닝및분석 자리 남았어?" | "9석" | 60석 |
+| `seats-07` | "소프트웨어공학 자리 넉넉한 편이야?" | "14석" | 23석 |
+| `seats-09` | "네트워크보안 몇 명이나 더 받을 수 있어?" | "3석" | 17석 |
+| `seats-11` | "자바프로그래밍 다른 분반 몇 명 신청했어?" | "37명" (= `enrolled`) | 36명 (= 정원 40 − 잔여석 4) |
+| `seats-12` | "자바프로그래밍 분반들 좋아요 몇 개?" | **Tool 호출 거부** ("관심 등록 수는 확인할 수 없습니다") | 각 분반 0개 |
+
+`seats-11`/`seats-12`가 Before에서 실패하는 방식이 핵심 — Before `_summarize`엔 `registered_count`·`interest_count` 자체가 없어, 신청자 수는 `enrolled`(하트 섞인 값)로 답하고 관심 등록 수는 아예 못 답했다.
+
+### 토큰 +334/turn (in) 원인
+
+- 시스템 프롬프트 +2문장(~40토큰)
+- Tool 관측값이 과목당 `enrolled` 1개 → `remaining_seats`·`registered_count`·`interest_count` 3개
+- `multiturn-06`에서 `get_course_by_code` 2회(각 관측값 포함)로 이동
+
+## 8-6. 결론
+
+<callout icon="✅" color="green_bg">
+**챗봇 "잔여석"이 이제 실시간 수강신청 좌석(Redis)을 답한다. 실시간 신청자 수와 관심 등록(하트) 수도 각각 분리해서 답한다.**
+</callout>
+
+1. **답변 포함 73.7 → 100%, 답변 제외 80 → 100%.** 잔여석 6개 시나리오가 전부 닫혔고, "잔여석 0석이라 신청 불가"처럼 잘못된 마감 안내(84/85 과목에서 발생하던)가 사라졌다.
+2. **`registered_count` / `interest_count` 분리로 "몇 명 신청 vs 좋아요 몇 개"를 다른 소스에서 답한다.** Before는 후자를 아예 거부(과소 호출 1.5%)했다.
+3. **회귀는 `multiturn-06` 2턴 tool 선택 이동 1건** — `search_courses` 재검색 → 1턴 결과의 분반 코드로 `get_course_by_code`. 답변은 정확하고 두 경로 다 유효해 라벨을 `any`로 완화(형제 시나리오 `multiturn-03/04/05`도 후속 턴은 이미 `ignore`).
+4. **비용 +17%**($0.47 → $0.55 / 1,000 turn) — Tool 관측값이 좌석 3필드로 늘어난 대가. 여전히 `gemini-3.6-flash`($3.26)의 1/6.
+
+**교훈:**
+- **"얇은 벤치마크가 조용한 버그를 놓친다"(§6-2)의 재확인.** §1~7을 끝내고 답변 포함 검사 100%였지만, 잔여석 시나리오가 `expect_tool`만 보고 답변 내용(숫자)을 안 봐서 "완전히 틀린 좌석을 자신 있게 답하는" 버그가 통과하고 있었다. `seedBenchmarkSeats.js`로 결정적 좌석을 심고 `answer_must_include`에 실제 숫자를 박아 닫았다.
+- **한 도메인 개념에 값이 여러 개면 Tool 출력에서 이름으로 분리한다.** `enrolled` 하나로 뭉쳐 있으면 모델은 그걸 "수강 인원"으로 읽는다 — `remaining_seats`/`registered_count`/`interest_count`로 쪼개니 프롬프트 지시가 거의 필요 없었다.
+
+**챗봇 Tool·프롬프트는 이 상태로 확정.** RAG 결합(Stage 1) 전까지 안 건듦.
+

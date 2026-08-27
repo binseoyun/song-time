@@ -12,13 +12,23 @@ BACKEND_BASE_URL = os.getenv("BACKEND_BASE_URL", "http://localhost:8000")
 _WEEKDAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"]
 
 
-def _remaining_seats(course: Dict[str, Any]) -> int:
-    capacity = course.get("capacity") or 0
-    enrolled = course.get("enrolled") or 0
-    return max(capacity - enrolled, 0)
+# ADR-013: 이 앱에는 "수강 인원"을 뜻하는 값이 여러 개 있고 서로 다른 저장소에 산다.
+# 챗봇은 아래 3개를 분리해서 답한다 — 섞으면 "잔여석 0인데 실제로는 비어 있음" 같은 오답이 난다.
+#   - remaining_seats  : 실시간 수강신청 잔여석 (Node가 Redis class:{id}:seats에서 읽어 응답).
+#                        None이면 실시간 좌석 정보 확인 불가 → 지어내지 말고 모른다고 답한다.
+#   - registered_count : 실시간 수강신청 신청자 수 = 정원 - 잔여석.
+#   - interest_count   : 관심 등록(하트) 수. course_interests 테이블 행 수로, 실시간 신청과 무관하다.
+def _seat_fields(course: Dict[str, Any]) -> tuple:
+    capacity = course.get("capacity")
+    remaining = course.get("remainingSeats")  # Redis 실시간 잔여석 or None
+    registered = None
+    if isinstance(capacity, int) and isinstance(remaining, int):
+        registered = max(capacity - remaining, 0)
+    return remaining, registered
 
 
 def _summarize(course: Dict[str, Any]) -> Dict[str, Any]:
+    remaining, registered = _seat_fields(course)
     return {
         "code": course.get("code"),
         "name": course.get("name"),
@@ -26,8 +36,9 @@ def _summarize(course: Dict[str, Any]) -> Dict[str, Any]:
         "department": course.get("department"),
         "credits": course.get("credits"),
         "capacity": course.get("capacity"),
-        "enrolled": course.get("enrolled"),
-        "remaining_seats": _remaining_seats(course),
+        "remaining_seats": remaining,
+        "registered_count": registered,
+        "interest_count": course.get("interestCount"),
     }
 
 
@@ -70,10 +81,13 @@ def _filter_courses(courses: List[Dict[str, Any]], keyword: str) -> List[Dict[st
 def search_courses(keyword: str = "") -> List[Dict[str, Any]]:
     """과목명·학과명·담당 교수명으로 과목들을 조회한다. keyword에는 핵심어만 넣는다 —
     "교수님"·"관련"·"수업" 같은 군더더기나 조사는 빼고 교수명이나 과목명 조각만
-    (예: "창병모", "데이터베이스"). 반환값에는 각 과목의 담당 교수·학점·정원·잔여석이
-    모두 들어 있으므로, 요일/시간(시간표)이 필요할 때만 get_course_by_code를 추가로
-    호출한다. keyword를 비우면 개설된 전체 과목을 반환한다. 과목 코드(예: 21003183-1)를
-    정확히 알 때는 get_course_by_code를 쓴다."""
+    (예: "창병모", "데이터베이스"). 반환값에는 각 과목의 담당 교수·학점·정원과 함께
+    remaining_seats(실시간 수강신청 잔여석), registered_count(실시간 신청자 수),
+    interest_count(관심 등록·하트 수)가 들어 있다 — 이 셋은 서로 다른 값이니 질문에 맞는
+    것을 골라 답한다. remaining_seats가 null이면 실시간 좌석 정보를 확인할 수 없다는 뜻이다.
+    요일/시간(시간표)이 필요할 때만 get_course_by_code를 추가로 호출한다. keyword를 비우면
+    개설된 전체 과목을 반환한다. 과목 코드(예: 21003183-1)를 정확히 알 때는
+    get_course_by_code를 쓴다."""
     response = requests.get(f"{BACKEND_BASE_URL}/api/courses", timeout=10)
     response.raise_for_status()
     courses = _filter_courses(response.json(), keyword)
@@ -83,7 +97,8 @@ def search_courses(keyword: str = "") -> List[Dict[str, Any]]:
 @tool
 def get_course_by_code(code: str) -> Dict[str, Any]:
     """과목 코드(예: 21003183-1)로 특정 과목 하나를 조회한다. 담당 교수, 학점,
-    요일/시간(시간표), 잔여석 등 상세 정보를 반환한다. 과목명이나 교수명만 알 때는
+    요일/시간(시간표), remaining_seats(실시간 잔여석), registered_count(실시간 신청자 수),
+    interest_count(관심 등록·하트 수) 등 상세 정보를 반환한다. 과목명이나 교수명만 알 때는
     search_courses를 쓴다."""
     response = requests.get(f"{BACKEND_BASE_URL}/api/courses/{code}", timeout=10)
     if response.status_code == 404:
