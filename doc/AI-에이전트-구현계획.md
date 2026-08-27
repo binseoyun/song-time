@@ -11,8 +11,8 @@
 
 ## 전제 조건 (착수 전 확인)
 
-- [ ] 사용자가 강의계획서 PDF 샘플 제공 — Stage 1 착수 조건
-- [ ] 사용자가 최신 학기 강의 데이터(캡쳐본) 제공 — `Class` 테이블 재시딩, Stage 0 End-to-End 테스트를 실제 데이터로 하려면 필요(Tool 라우팅 자체 검증은 기존 시드 데이터로도 가능해 완전 차단은 아님)
+- [x] 사용자가 강의계획서 PDF 제공(2026-08-27) — 소프트웨어학부 2026-2학기 19개(`C:\Users\82102\Cloudsystem\pdf`). Stage 1-1에서 전수 정독
+- [x] 사용자가 최신 학기 강의 데이터(캡쳐본) 제공(2026-08-27) — Notion 강의목록 3장(소프트웨어학부). `Class` 테이블 재시딩은 별도 이슈(1-1 다음 순서)
 
 ## Stage 0 — Tool 라우팅 검증 (RAG 없이, ~2~3일)
 
@@ -38,10 +38,19 @@
 
 목표: 강의계획서 의미 검색을 실제로 붙인다. ADR-010 §4/§5/§6/§13 반영.
 
-- [ ] 1-1. 제공받은 PDF 샘플로 실제 구조 확인(주차별 계획이 표인지 텍스트인지 등) → 청킹 규칙 확정(ADR-010 §13 열린 사항을 여기서 닫음). 청크를 읽는 김에 eval용 (질문, 정답 청크) 쌍을 수동으로 함께 작성(ADR-010 §14 "eval 정답 라벨링 방법론") — 검수 부담이 크면 LLM 보조 생성으로 전환
-- [ ] 1-2. `pdfplumber` 파싱 파이프라인 + `gemini-embedding-001` 임베딩 + Chroma 적재 스크립트 — 완전 수동 실행(관리자 UI 없음), 실행 시 기존 collection 전체 삭제 후 재생성(wipe-and-reload), 재적재 전 `ai-server` 컨테이너 정지 필요(동시 파일 락 충돌 방지) (ADR-010 §4 "재적재 운영 방식")
-- [ ] 1-3. RAG 검색을 0-5의 `AgentExecutor`에 세 번째 Tool로 결합(별도 경로 아님, ADR-010 §12 재검토) — "이런 걸 배우고 싶은데 관련 과목 있어?" 같은 의미 기반 질문 처리. description에 "정확한 값 질문(잔여석 등)에는 쓰지 않는다"는 부정형 지시 포함(ADR-010 §8 Tool 설계 원칙)
-- [ ] 1-4. RAG 검색 hit rate 측정(정답 청크가 top-k 안에 들어오는 비율) — `doc/experiment/`에 원본 저장
+- [x] 1-1. 강의계획서 19개(소프트웨어학부 2026-2) 전수 정독 → 청킹 규칙 확정(ADR-010 §13 닫음) + eval 라벨 작성 — 이슈 #87. **결정 요약**:
+  - 완전히 고정된 숙명 양식(섹션 1~8, 8번=주차별 표, 1번=개요 산문). 의미검색용 본문이 얇음(과목당 ~250토큰)
+  - **과목당 1청크**, 분반 병합/분리는 본문 해시로(알고리즘 001/002 병합, 경영정보시스템 001/002 분리). 19파일 → 17청크
+  - 임베딩 본문 = 메타 헤더 + 개요 + 목표 + 선수과목 + 강의방법 + 주차별 주제. 오버랩 0
+  - 구조화 필드(평가·주교재·선수과목·이메일·강의형태)는 **벡터 DB 페이로드(메타데이터)**(별도 SQL 테이블 없음). `get_syllabus`가 페이로드 필터로 정확 조회
+  - RAG Tool 1개 → **2개**(`search_syllabus` 유사도 / `get_syllabus` 정확 조회) — ADR-010 §8 갱신
+  - PDF 없는 과목 → "강의계획서 미등록" 답변 + Tool 정보만
+  - eval 라벨: `backend/ai-server/eval/rag_questions.yaml` (의미검색 / 미등록 negative / 범위밖)
+  - 설계 상세: Notion "AI 챗봇 RAG 결합 (Stage 1) — 강의계획서 데이터셋 설계"
+- [ ] (별도 이슈) `Class` 테이블 재시딩 — Notion 강의목록 → Node `seedData.js` + `ClassSchedule`. 현재 seed(92과목)는 syllabi 16과목과 다른 세트. 1-1 다음, 1-2 전. RAG와 코드 소유가 분리돼 별도 PR
+- [ ] 1-2. 강의계획서 → `gemini-embedding-001` 비대칭 임베딩(`RETRIEVAL_DOCUMENT`) → **Qdrant** 적재 스크립트 (ADR-010 §4 재검토로 Chroma→Qdrant, 이슈 #91). `docker-compose.yml`에 `qdrant` 서비스 + volume 추가, `requirements.txt`에 `qdrant-client`. 완전 수동 실행, wipe-and-reload(`recreate_collection` 또는 alias 스왑). `--dry-run`(파싱 결과만)·적재 후 요약·`inspect_qdrant.py`(list/show/query) 검증 장치. **파싱 방식(pdfplumber 파이프라인 vs 수기 `syllabi.yaml`)은 착수 시 확정** (§6 관련, 논의 중)
+- [ ] 1-3. `search_syllabus`·`get_syllabus`를 `chat/tools.py`의 `TOOLS`에 추가 + `agent.py` 시스템 프롬프트에 "정확한 값 질문에는 강의계획서 검색 안 씀" + "미등록 과목은 지어내지 않음" 명시(ADR-010 §8) — #82(#85) 머지 완료로 착수 가능
+- [ ] 1-4. RAG 검색 hit rate 측정(정답 과목코드가 top-k 안에 들어오는 비율) + naive 베이스라인(전체 강의계획서 프롬프트 주입) Before/After — `doc/experiment/`에 원본 저장. **재시딩 선행 필요**
 
 ## Stage 2 — 스트리밍 + UI (~2~3일)
 
