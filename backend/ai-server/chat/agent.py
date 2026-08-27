@@ -26,7 +26,10 @@ SYSTEM_PROMPT = (
     "화면에서 직접 신청하도록 안내한다."
 )
 
-_CHAT_MODEL = os.getenv("CHAT_MODEL", "gemini-3.6-flash")
+# 기본값은 ADR-012(7종 모델 비교, 이슈 #78/#80)에서 선정한 gemini-3.1-flash-lite.
+# Tool 라우팅 100%·과잉 호출 0%·가장 빠름(p50 1.7s)·2번째로 쌈. gemini-3.6-flash 대비
+# 정확도 93.1→100%, 과잉호출 42→0%, turn당 비용 1/8.5.
+_CHAT_MODEL = os.getenv("CHAT_MODEL", "gemini-3.1-flash-lite")
 # create_agent엔 max_iterations 파라미터가 없다 — LangGraph 실행 엔진의
 # recursion_limit(agent.invoke의 config)으로 턴당 호출 상한을 건다(router.py).
 RECURSION_LIMIT = int(os.getenv("CHAT_MAX_ITERATIONS", "6")) * 2 + 1
@@ -37,8 +40,8 @@ _agent = None
 def build_llm(model: str):
     """모델명 prefix로 프로바이더별 LangChain 채팅 모델을 만든다(이슈 #78).
 
-    - gemini*  : temperature=0을 넘긴다(gemini-3.6-flash 등 flash 계열은 고정 샘플링이라
-                 무시하고 UserWarning만 냄 — baseline 실행과 조건을 맞추려고 유지).
+    - gemini*  : temperature=0을 넘긴다(flash/flash-lite 계열은 고정 샘플링이라
+                 무시하고 UserWarning만 냄 — 실험 실행과 조건을 맞추려고 유지).
     - gpt*     : GPT-5 계열은 temperature 커스터마이즈를 막으므로 아무것도 안 넘기고
                  프로바이더 기본값(사실상 비결정)으로 둔다. gpt-4o 계열도 일관성을 위해 동일.
     - claude*/grok* : 브랜치만 있고 의존성(langchain-anthropic/langchain-xai)은 미설치.

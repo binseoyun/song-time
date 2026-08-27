@@ -8,7 +8,7 @@ RAG를 붙이기 전, 순수 function-calling 라우팅의 baseline 수치를 �
 실행 (ai-server 컨테이너 안, backend가 떠 있어야 함):
     docker compose run --rm --no-deps ai-server python -m eval.run_tool_eval
 멀티 프로바이더 비교(별도 이슈)는 CHAT_MODEL 만 바꿔 이 스크립트를 재실행한다:
-    ... python -m eval.run_tool_eval --model gemini-3.6-flash
+    ... python -m eval.run_tool_eval --model gemini-3.5-flash-lite
 """
 from __future__ import annotations
 
@@ -267,8 +267,8 @@ def main() -> None:
     # CHAT_MODEL 확정 후에 import (chat.agent가 import 시점에 모델명을 읽는다)
     from chat.agent import RECURSION_LIMIT, get_agent
 
-    model = os.getenv("CHAT_MODEL", "gemini-3.6-flash")
-    if not os.getenv("GEMINI_API_KEY"):
+    model = os.getenv("CHAT_MODEL", "gemini-3.1-flash-lite")
+    if model.startswith(("gemini", "models/gemini")) and not os.getenv("GEMINI_API_KEY"):
         sys.exit("[오류] GEMINI_API_KEY 가 없습니다.")
 
     print(f"모델={model}  backend={backend_desc}  시나리오={len(scenarios)}  반복={args.reps}")
