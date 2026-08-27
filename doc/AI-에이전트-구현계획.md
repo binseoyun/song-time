@@ -47,8 +47,8 @@
 
 목표: 실제 채팅 UI로 완성한다. write Tool은 설계에서 배제했으므로(ADR-010 §9), `registrationRoutes` 최종안 확정 여부와 무관하게 진행 가능하다. ADR-010 §11 반영.
 
-- [ ] 2-1. `POST /api/ai/chat`을 SSE 스트리밍으로 전환 + nginx `proxy_buffering off`/타임아웃 설정 추가. Node→`ai-server` 구간도 버퍼링 없이 청크 단위로 흘려보내도록 구현. `docker-compose.yml`에서 `ai-server`의 `ports: ["5000:5000"]` 직접 노출 제거 (ADR-010 §11)
-- [ ] 2-2. 프론트 채팅 UI(기존 "실시간 수강신청 연습" 탭과 자연스럽게 연결되는 위치 검토) — 읽기 전용 상담 UI(추천/질의응답/상태 조회)로, 신청·취소 버튼은 없음. "새 대화" 버튼(0-4/0-5의 세션 목록·과거 대화 조회 API) 포함(ADR-010 §10 세션 경계 정의)
+- [x] 2-1. `POST /api/ai/chat`을 SSE 스트리밍으로 전환(이슈 #83) — `agent.stream(stream_mode=["updates","messages"])`로 `meta`/`tool_call`/`token`/`done`/`error` 이벤트. nginx `location = /api/ai/chat`에 `proxy_buffering off`/`proxy_read_timeout 300s`, Node는 `axios` stream + `pipe`로 버퍼링 없이 통과(클라 끊기면 상류도 destroy), ai-server 응답 헤더 `X-Accel-Buffering: no`. `docker-compose.yml`(+ override)에서 `ai-server` 호스트 포트 노출 제거. → [리팩토링 02](refactoring/02-챗봇-SSE-스트리밍-전환-및-채팅-UI.md)
+- [x] 2-2. 프론트 채팅 UI(이슈 #83) — "AI 상담 챗봇" 새 탭("실시간 수강신청 연습" 왼쪽). 읽기 전용(신청·취소 버튼 없음), "새 대화" + 왼쪽 세션 목록(0-4/0-5 API). `fetch` 스트림 리더로 SSE 직접 파싱(EventSource는 POST/헤더 불가). 레이아웃은 인라인 style(정적 Tailwind CSS 제약 — 트러블슈팅 03)
 
 ## Stage 3 — 가드레일 강화 + 최종 측정 (~1.5~2.5일)
 

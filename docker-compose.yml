@@ -244,8 +244,10 @@ services:
         condition: service_healthy
       redis-chat:
         condition: service_started
-    ports:
-      - "5000:5000"
+    # 호스트 포트 직접 노출 제거(ADR-010 §11, 이슈 #31/#83) — 정상 경로가 전부
+    # nginx→Node를 거치므로(인증·rate limit), 이 포트가 열려 있으면 인증을 우회해
+    # Gemini 토큰 비용을 유발시킬 수 있는 표면만 남는다. ai-server는 Docker 내부망에서만
+    # 접근 가능하고, 이 격리가 x-user-id 신뢰 헤더 방식의 보안 전제이기도 하다.
     restart: unless-stopped
 
   frontend:

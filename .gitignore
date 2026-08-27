@@ -42,3 +42,6 @@ doc/experiment/raw/noisy-run-*/
 node_modules
 node_modules
 node_modules
+
+# Stage 2 워크트리 로컬 인프라 오버라이드
+docker-compose.override.yml

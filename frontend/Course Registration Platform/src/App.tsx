@@ -4,6 +4,7 @@ import { HomePage } from './components/HomePage';
 import { TimetableGenerator } from './components/TimetableGenerator';
 import { CourseList } from './components/CourseList';
 import { AIRecommendation } from './components/AIRecommendation';
+import { AIChat } from './components/AIChat';
 import { RegistrationPractice } from './components/RegistrationPractice';
 import { MyPage } from './components/MyPage';
 
@@ -51,7 +52,15 @@ export type User = {
   department: string;
 };
 
-export type Page = 'login' | 'home' | 'timetable' | 'courses' | 'ai' | 'registration' | 'mypage';
+export type Page =
+  | 'login'
+  | 'home'
+  | 'timetable'
+  | 'courses'
+  | 'ai'
+  | 'aichat'
+  | 'registration'
+  | 'mypage';
 
 // ADR-003: frontend는 항상 자신을 서빙한 origin의 상대경로(/api/...)로만 호출한다.
 // (Ingress/nginx가 그 요청을 실제 backend로 넘겨준다 — 환경별로 다른 절대주소를 알 필요가 없다)
@@ -539,6 +548,16 @@ export default function App() {
                   AI 수업 추천
                 </button>
                 <button
+                  onClick={() => setCurrentPage('aichat')}
+                  className={`px-3 py-2 rounded-md ${
+                    currentPage === 'aichat'
+                      ? 'bg-blue-50 text-blue-600'
+                      : 'text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  AI 상담 챗봇
+                </button>
+                <button
                   onClick={() => setCurrentPage('registration')}
                   className={`px-3 py-2 rounded-md ${
                     currentPage === 'registration'
@@ -628,6 +647,9 @@ export default function App() {
             onToggleInterest={handleToggleInterest}
             interestedCourses={interestedCourses}
           />
+        )}
+        {currentPage === 'aichat' && user && authToken && (
+          <AIChat user={user} authToken={authToken} />
         )}
         {currentPage === 'registration' && user && authToken && (
           <RegistrationPractice user={user} authToken={authToken} courses={courses} />
