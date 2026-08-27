@@ -9,7 +9,7 @@ beforeAll(async () => {
   await resetDatabase();
   await createClass({ id: 'C001', code: 'CS101', name: '자료구조' }); // capacity 30, enrolled 0
   await createClass({ id: 'C002', code: 'CS102', name: '운영체제', capacity: 40 });
-  await redis.set(classSeatsKey('C001'), 7); // 실시간 잔여석 = 7 (cap-enrolled=30과 다름)
+  await redis.set(classSeatsKey('C001'), 7); // 실시간 잔여석 = 7 (MySQL remainingSeats 30과 다름)
   await redis.del(classSeatsKey('C002')); // 좌석 키 없음 → null
   ({ token } = await signupUser());
 });
@@ -32,17 +32,19 @@ describe('GET /api/courses', () => {
     const c001 = res.body.find((c) => c.id === 'C001');
     const c002 = res.body.find((c) => c.id === 'C002');
 
-    expect(c001.remainingSeats).toBe(7); // capacity-enrolled(5)가 아니라 Redis 값
-    expect(c001.interestCount).toBe(0);
+    expect(c001.remainingSeats).toBe(7); // MySQL 컬럼값(30)이 아니라 Redis 값
     expect(c002.remainingSeats).toBeNull(); // 좌석 키 없으면 null (capacity로 폴백 안 함)
+    // 관심 등록 수는 Class.enrolled를 그대로 노출한다(#93) — 별도 course_interests COUNT 안 씀
+    expect(c001.enrolled).toBe(0);
+    expect(c001).not.toHaveProperty('interestCount');
   });
 });
 
 describe('GET /api/courses/:code', () => {
-  test('단건 조회도 실시간 좌석/관심 등록 수를 포함한다', async () => {
+  test('단건 조회도 실시간 좌석(Redis)을 반영한다', async () => {
     const res = await request(app).get('/api/courses/CS101');
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ code: 'CS101', remainingSeats: 7, interestCount: 0 });
+    expect(res.body).toMatchObject({ code: 'CS101', remainingSeats: 7 });
   });
 });
 

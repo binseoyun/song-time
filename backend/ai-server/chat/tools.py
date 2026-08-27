@@ -12,12 +12,14 @@ BACKEND_BASE_URL = os.getenv("BACKEND_BASE_URL", "http://localhost:8000")
 _WEEKDAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"]
 
 
-# ADR-013: 이 앱에는 "수강 인원"을 뜻하는 값이 여러 개 있고 서로 다른 저장소에 산다.
+# ADR-013 / 이슈 #93: 이 앱에는 "수강 인원"을 뜻하는 값이 여러 개 있고 서로 다른 저장소에 산다.
 # 챗봇은 아래 3개를 분리해서 답한다 — 섞으면 "잔여석 0인데 실제로는 비어 있음" 같은 오답이 난다.
 #   - remaining_seats  : 실시간 수강신청 잔여석 (Node가 Redis class:{id}:seats에서 읽어 응답).
 #                        None이면 실시간 좌석 정보 확인 불가 → 지어내지 말고 모른다고 답한다.
 #   - registered_count : 실시간 수강신청 신청자 수 = 정원 - 잔여석.
-#   - interest_count   : 관심 등록(하트) 수. course_interests 테이블 행 수로, 실시간 신청과 무관하다.
+#   - interest_count   : 관심 등록(하트) 수 = Class.enrolled. 수업 목록 UI가 표시하는 값과 같다
+#                        (toggleInterest가 live 유지, demandController가 course_interests 실측으로 재조정).
+#                        실시간 신청과는 무관하다.
 def _seat_fields(course: Dict[str, Any]) -> tuple:
     capacity = course.get("capacity")
     remaining = course.get("remainingSeats")  # Redis 실시간 잔여석 or None
@@ -38,7 +40,7 @@ def _summarize(course: Dict[str, Any]) -> Dict[str, Any]:
         "capacity": course.get("capacity"),
         "remaining_seats": remaining,
         "registered_count": registered,
-        "interest_count": course.get("interestCount"),
+        "interest_count": course.get("enrolled"),
     }
 
 

@@ -327,12 +327,12 @@
 
 - id: seats-12
   category: 잔여석
-  note: "관심 등록(좋아요) 질문은 interest_count로. 자바프로그래밍 전 분반 course_interests 0 → '관심 등록 없음'. 구 챗봇은 interest_count 개념이 없어 '확인 불가'로 거절(Tool 호출 안 함) → under-call"
+  note: "관심 등록(좋아요) 질문은 interest_count(= Class.enrolled, 수업 목록 UI 표시값과 동일 — #93)로 답한다. 자바프로그래밍 분반별 enrolled 30/37/39. 구 챗봇은 interest_count 개념이 없어 '확인 불가'로 거절(Tool 호출 안 함) → under-call. 실시간 신청자 수(픽스처 기준 25/36/28)와 헷갈리면 안 됨"
   turns:
     - user: "자바프로그래밍 분반들 좋아요(관심 등록) 몇 개씩 눌렸어?"
       expect_tool: search_courses
       expect_args: { keyword: "자바프로그래밍" }
-      answer_must_not_include: ["25명이 관심", "36명이 관심", "12명이 관심"]
+      answer_must_not_include: ["25명이 관심", "36명이 관심", "28명이 관심"]
 
 - id: seats-10
   category: 잔여석

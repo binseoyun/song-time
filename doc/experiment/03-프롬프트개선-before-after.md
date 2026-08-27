@@ -452,3 +452,15 @@ Stage 3-1(§1~7)을 끝내고 실사용 테스트 중 발견:
 
 **챗봇 Tool·프롬프트는 이 상태로 확정.** RAG 결합(Stage 1) 전까지 안 건듦.
 
+## 8-7. 정정 — 관심 등록 수 소스 (이슈 #93)
+
+배포 후 실사용: 챗봇 관심 등록 수가 수업 목록 UI와 달랐다("화면 75명 / 챗봇 0명").
+
+§8에서 `interest_count`를 `course_interests` 테이블 `COUNT`로 잡았는데, 이 앱의 **정식 관심 등록 수 카운터는 `Class.enrolled`**다 — `toggleInterest`가 `+1/−1`로 즉시 유지하고, `demandController.aggregateDemand`(수요 체커 CronJob, 매분)가 `CourseInterest.count()` 실측으로 재조정하며, 수업 목록 UI가 표시하는 "n / M명"의 n이 바로 이 값이다. 로컬은 CronJob이 안 돌아 시드값(75)에 멈춰 있어 챗봇(`COUNT` = 0)과 크게 벌어졌다.
+
+**변경**: `_summarize`의 `interest_count` 소스를 `course.get("interestCount")` → `course.get("enrolled")`. `courseController`의 `course_interests` `GROUP BY COUNT`(응답 `interestCount`)는 제거. `remaining_seats`/`registered_count`(Redis 실시간 좌석)는 §8 그대로 — 그게 원래 버그였다.
+
+eval 재측정 안 함 — `interest_count` **값**을 채점하는 시나리오가 없다(seats-12는 `answer_must_not_include`로 "신청자 수와 혼동" 여부만 봄). ADR-013 재검토 섹션 참고.
+
+**교훈**: "값이 여러 개면 이름으로 분리한다"(§8-6)는 맞지만, **분리 전에 그 도메인의 정식 소스가 이미 뭔지 확인**했어야 했다. `demandController`가 `enrolled = interest count`로 쓰고 있었는데 그걸 놓치고 새 COUNT를 만들었다.
+
