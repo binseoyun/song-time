@@ -55,7 +55,7 @@
 목표: 프로덕션 수준의 안정성을 갖추고, Before/After 수치를 최종 정리한다.
 
 - [ ] 3-0. Node에 사용자 단위 rate limit 미들웨어 구현(기존 Group C `redis` 사용, `redis-chat`은 `ai-server` 전용이라 안 씀 — 구조는 ADR-010 §15 확정, 윈도우 길이·허용 횟수는 실측 후 확정)
-- [ ] 3-1. 범위 밖 질문 거절(수강신청과 무관한 질문에 대한 응답 정책)
+- [x] 3-1. 프롬프트/Tool 고도화 — 이슈 #82. baseline·모델비교 raw에서 발견한 갭을 닫고 gemini-3.1-flash-lite로 재측정. (a) `search_courses`에 professor 매칭 + 노이즈 토큰("교수님"·"관련"·"수업" 등) 흡수 필터 — 실사용 버그("창병모 교수님 이번학기 수업 해?" → 빈 결과) 수정, (b) 시스템 프롬프트에 관심과목 담기·강의평 거절 + "거절 시 조회 Tool 안 씀" 명시, (c) Tool description 정리. **Before/After: 답변 포함 검사 77.8→100%, Tool 선택·과잉·과소 호출·할루시네이션 전부 유지(회귀 없음), 벤치마크 70→72**. 상세: [`03-프롬프트개선-before-after.md`](experiment/03-프롬프트개선-before-after.md), Notion 보고서 06. ADR 안 만듦(구현 세부).
 - [ ] 3-2. Gemini API 장애 시 폴백(에러 메시지 vs 재시도) — `/recommend`는 3-4에서 제거 대상이라 다운그레이드 경로로 쓰지 않는다(ADR-010 §17 "완전 대체" 결정)
 - [ ] 3-3. 최종 측정: Tool 선택 정확도 재측정, 할루시네이션 비율(수작업 샘플링), E2E p95 latency, Gemini 토큰 비용 — Stage 0/1 결과와 비교해 "가드레일 전/후" Before/After로 정리(ADR-010 §14)
 - [ ] 3-4. `/recommend` 제거 — 새 챗봇이 3-3 측정까지 끝나 안정성이 검증된 뒤, 프론트 `AIRecommendation.tsx`(및 진입 탭), `backend/src/routes/aiRoutes.js`·`aiController.js`의 `/recommend` 경로, `backend/ai-server/main.py`의 `/recommend` 엔드포인트를 삭제(ADR-010 §17 "완전 대체" 결정)
