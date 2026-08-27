@@ -69,7 +69,7 @@
 
 - id: search-03
   category: 과목검색
-  note: "교수명은 name에 없음 → keyword='심준호'면 빈 결과. 전체 조회 후 필터가 이상적. Tool 설계 한계 노출용 — 라벨은 search_courses 호출 자체까지만 요구"
+  note: "교수명 검색. Stage 3-1(#82)에서 search_courses가 professor도 매칭하도록 확장 → keyword='심준호'로 바로 조회 가능. Before: flash-lite는 빈 결과 받고 되물음(답변 포함 검사 77.8%)"
   turns:
     - user: "심준호 교수님 수업 뭐뭐 하셔?"
       expect_tool: search_courses
@@ -85,11 +85,12 @@
 
 - id: search-05
   category: 과목검색
-  note: "네트워크보안 / 시스템보안 매칭"
+  note: "네트워크보안 / 시스템보안 매칭. '쪽 수업' 군더더기 있어도 결과 나와야 (#82 노이즈 토큰 처리)"
   turns:
     - user: "보안 쪽 수업 뭐 있는지 보여줘"
       expect_tool: search_courses
       expect_args: { keyword: "보안" }
+      answer_must_include: ["네트워크보안", "시스템보안"]
 
 - id: search-06
   category: 과목검색
@@ -117,11 +118,29 @@
 
 - id: search-09
   category: 과목검색
-  note: "네트워크보안 / 컴퓨터네트워크Ⅰ / 네트워크(캡스톤디자인) 매칭"
+  note: "네트워크보안 / 컴퓨터네트워크Ⅰ / 네트워크(캡스톤디자인) 매칭. '관련 강의' 군더더기 (#82)"
   turns:
     - user: "네트워크 관련 강의 뭐뭐 열렸어?"
       expect_tool: search_courses
       expect_args: { keyword: "네트워크" }
+      answer_must_include: ["네트워크보안", "컴퓨터네트워크"]
+
+- id: search-11
+  category: 과목검색
+  note: "#82 실사용 버그 재현: 교수명 + '이번학기 수업 해?' yes/no 프레이징. keyword='창병모 교수님'이면 부분문자열 매칭 실패 → 노이즈 토큰 제거로 해결. 창병모 = 리눅스시스템·자바프로그래밍"
+  turns:
+    - user: "창병모 교수님 이번학기 수업 해?"
+      expect_tool: search_courses
+      answer_must_include: ["리눅스시스템"]
+      answer_must_not_include: ["하지 않으십니다", "개설하지 않"]
+
+- id: search-12
+  category: 과목검색
+  note: "#82 실사용 버그 재현: '데이터베이스 관련 수업' → keyword에 '관련 수업' 붙어도 5개(설계와질의 3 + 데이터베이스 2) 다 나와야"
+  turns:
+    - user: "데이터베이스 관련 수업 알려줘"
+      expect_tool: search_courses
+      answer_must_include: ["데이터베이스설계와질의", "박영호"]
 
 - id: search-10
   category: 과목검색
@@ -440,11 +459,11 @@
 
 - id: ambiguous-08
   category: 모호
-  note: "'프로그래밍'→10개 이상 매칭. 되물음이 특히 바람직"
+  note: "'프로그래밍'→13개 매칭. 이 정도로 광범위하면 되묻기('어떤 분야?')가 검색보다 나은 UX — 둘 다 정답으로 본다(#82 재검토: Stage 3-1 프롬프트 후 flash-lite가 여기서 되묻기로 전환). 답변에 '프로그래밍'이 나오는지만 확인"
   turns:
     - user: "프로그래밍 수업 뭐 들으면 좋을까?"
-      expect_tool: search_courses
-      expect_args: { keyword: "프로그래밍" }
+      expect_tool: ignore
+      answer_must_include: ["프로그래밍"]
 
 - id: ambiguous-09
   category: 모호
@@ -571,7 +590,7 @@
 
 - id: multiturn-04
   category: 멀티턴
-  note: "교수 → 과목 → 잔여석 체인. 2턴 '그거' = 심준호 과목"
+  note: "교수 → 과목 → 잔여석 체인. 2턴 '그거' = 심준호 과목. Stage 3-1(#82)에서 search_courses professor 매칭 확장"
   turns:
     - user: "심준호 교수님 무슨 과목 하셔?"
       expect_tool: search_courses

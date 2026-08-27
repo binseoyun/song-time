@@ -37,27 +37,54 @@ def _weekday_label(weekday: Any) -> Any:
     return weekday
 
 
+# 검색어에 자주 섞여 오는 군더더기 — "창병모 교수님", "데이터베이스 관련 수업"처럼
+# 넘어오면 whole-string 매칭이 실패하므로 토큰 분리 시 걸러낸다.
+_SEARCH_NOISE = {"교수님", "교수", "님", "수업", "과목", "강의", "관련", "쪽", "들", "좀"}
+
+
+def _haystack(course: Dict[str, Any]) -> str:
+    return " ".join(
+        str(course.get(f) or "") for f in ("name", "professor", "department")
+    )
+
+
+def _filter_courses(courses: List[Dict[str, Any]], keyword: str) -> List[Dict[str, Any]]:
+    """1) 전체 keyword를 부분문자열로 먼저 시도(정확·특정 검색 유지). 2) 결과가 없으면
+    군더더기 단어를 뺀 토큰들의 OR 매칭으로 폴백(느슨한 자연어 질의 대응)."""
+    kw = keyword.strip()
+    if not kw:
+        return courses
+    exact = [c for c in courses if kw in _haystack(c)]
+    if exact:
+        return exact
+    tokens = [t for t in kw.split() if len(t) >= 2 and t not in _SEARCH_NOISE]
+    if not tokens:
+        return []
+    # 모든 토큰을 다 포함하는 과목 우선("자바 프로그래밍" → 자바프로그래밍만),
+    # 그런 게 없으면 아무 토큰이나 포함하는 것으로 완화.
+    strict = [c for c in courses if all(t in _haystack(c) for t in tokens)]
+    return strict or [c for c in courses if any(t in _haystack(c) for t in tokens)]
+
+
 @tool
 def search_courses(keyword: str = "") -> List[Dict[str, Any]]:
-    """과목명 또는 학과명에 keyword가 포함된 과목들의 잔여석 정보를 조회한다.
-    keyword를 비우면 개설된 전체 과목을 반환한다. 과목 코드를 정확히 알고 있을
-    때는 이 Tool 대신 get_course_by_code를 사용한다."""
+    """과목명·학과명·담당 교수명으로 과목들을 조회한다. keyword에는 핵심어만 넣는다 —
+    "교수님"·"관련"·"수업" 같은 군더더기나 조사는 빼고 교수명이나 과목명 조각만
+    (예: "창병모", "데이터베이스"). 반환값에는 각 과목의 담당 교수·학점·정원·잔여석이
+    모두 들어 있으므로, 요일/시간(시간표)이 필요할 때만 get_course_by_code를 추가로
+    호출한다. keyword를 비우면 개설된 전체 과목을 반환한다. 과목 코드(예: 21003183-1)를
+    정확히 알 때는 get_course_by_code를 쓴다."""
     response = requests.get(f"{BACKEND_BASE_URL}/api/courses", timeout=10)
     response.raise_for_status()
-    courses = response.json()
-    if keyword:
-        courses = [
-            c
-            for c in courses
-            if keyword in (c.get("name") or "") or keyword in (c.get("department") or "")
-        ]
+    courses = _filter_courses(response.json(), keyword)
     return [_summarize(c) for c in courses]
 
 
 @tool
 def get_course_by_code(code: str) -> Dict[str, Any]:
-    """과목 코드(예: CS301)로 특정 과목 하나를 정확히 조회한다. 담당 교수, 학점,
-    요일/시간, 잔여석 등 상세 정보를 반환한다."""
+    """과목 코드(예: 21003183-1)로 특정 과목 하나를 조회한다. 담당 교수, 학점,
+    요일/시간(시간표), 잔여석 등 상세 정보를 반환한다. 과목명이나 교수명만 알 때는
+    search_courses를 쓴다."""
     response = requests.get(f"{BACKEND_BASE_URL}/api/courses/{code}", timeout=10)
     if response.status_code == 404:
         return {"error": f"과목 코드 '{code}'를 찾을 수 없습니다."}
