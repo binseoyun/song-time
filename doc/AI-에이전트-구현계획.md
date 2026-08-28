@@ -48,7 +48,9 @@
   - eval 라벨: `backend/ai-server/eval/rag_questions.yaml` (의미검색 / 미등록 negative / 범위밖)
   - 설계 상세: Notion "AI 챗봇 RAG 결합 (Stage 1) — 강의계획서 데이터셋 설계"
 - [ ] (별도 이슈) `Class` 테이블 재시딩 — Notion 강의목록 → Node `seedData.js` + `ClassSchedule`. 현재 seed(92과목)는 syllabi 16과목과 다른 세트. 1-1 다음, 1-2 전. RAG와 코드 소유가 분리돼 별도 PR
-- [ ] 1-2. 강의계획서 → `gemini-embedding-001` 비대칭 임베딩(`RETRIEVAL_DOCUMENT`) → **Qdrant** 적재 스크립트 (ADR-010 §4 재검토로 Chroma→Qdrant, 이슈 #91). `docker-compose.yml`에 `qdrant` 서비스 + volume 추가, `requirements.txt`에 `qdrant-client`. 완전 수동 실행, wipe-and-reload(`recreate_collection` 또는 alias 스왑). `--dry-run`(파싱 결과만)·적재 후 요약·`inspect_qdrant.py`(list/show/query) 검증 장치. **파싱 방식(pdfplumber 파이프라인 vs 수기 `syllabi.yaml`)은 착수 시 확정** (§6 관련, 논의 중)
+- [ ] 1-2. 강의계획서 → `gemini-embedding-001` 비대칭 임베딩(`RETRIEVAL_DOCUMENT`) → **Qdrant** 적재 스크립트 (ADR-010 §4 재검토로 Chroma→Qdrant, 이슈 #91). `docker-compose.yml`에 `qdrant` 서비스 + volume 추가, `requirements.txt`에 `qdrant-client`. 완전 수동 실행, wipe-and-reload(`recreate_collection` 또는 alias 스왑). `--dry-run`(파싱 결과만)·적재 후 요약·`inspect_qdrant.py`(list/show/query) 검증 장치.
+  - **파싱 방식 = A3 확정**(2026-08-29, 이슈 #95, ADR-010 §6 재검토): pdfplumber 파서를 지금 만들지 않고, Stage 1-1 정독 산출물을 `syllabi.yaml`(single source of truth)로 커밋 → 로더는 `YAML → 임베딩 → Qdrant`. PDF 원본은 로컬만, 커밋은 정제된 YAML만. `syllabi.yaml` 스키마 검증 스크립트 포함(필드·`grading` 합 100·`weekly_plan` 15주·`course_code` `^\d{8}$`). 분반 병합은 사람이 YAML 작성 시 적용(해시 자동 병합은 A2 파서 도입 시). A2(파서 + `overrides.yaml`)는 범위 확장 시 재검토 — 트리거는 그때 논의.
+  - **Qdrant 페이로드 스키마·`get_syllabus` 시그니처 확정**(이슈 #95, ADR-010 §13 재검토): `class_no`는 패딩 없는 `["1","2"]`, `grading`/`weekly_plan`은 네이티브 JSON, `class_codes` 미저장(응답에서 파생), point ID = `uuid5(NS, "{code}__{min class_no}")`, 병합 규칙 = 본문 해시 AND 교수 일치. `get_syllabus(course_code, class_no=None)` — `class_no` 타입 관대하게, 다중 청크면 되물음.
 - [ ] 1-3. `search_syllabus`·`get_syllabus`를 `chat/tools.py`의 `TOOLS`에 추가 + `agent.py` 시스템 프롬프트에 "정확한 값 질문에는 강의계획서 검색 안 씀" + "미등록 과목은 지어내지 않음" 명시(ADR-010 §8) — #82(#85) 머지 완료로 착수 가능
 - [ ] 1-4. RAG 검색 hit rate 측정(정답 과목코드가 top-k 안에 들어오는 비율) + naive 베이스라인(전체 강의계획서 프롬프트 주입) Before/After — `doc/experiment/`에 원본 저장. **재시딩 선행 필요**
 
