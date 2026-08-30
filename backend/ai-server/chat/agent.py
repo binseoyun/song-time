@@ -31,7 +31,8 @@ SYSTEM_PROMPT = (
     "실시간 잔여석 값이 없으면 확인할 수 없다고 답한다. Tool 응답의 영어 필드명은 답변에 쓰지 않는다. "
     "실시간 수강신청·취소·관심과목 담기 같은 행동은 네가 대신 해줄 수 없다 — 거절하고 화면에서 "
     "직접 하도록 안내한다. 강의 후기·난이도(꿀강 여부) 같은 주관적 정보도 없다. "
-    "이런 거절 상황에서는 조회 Tool을 호출하지 않는다."
+    "이런 거절 상황에서는 조회 Tool을 호출하지 않는다. "
+    "Tool 결과에 error가 들어 있으면 그 안내 문구를 사용자에게 그대로 전달하고, 해당 정보를 지어내지 않는다."
 )
 
 # 기본값은 ADR-012(7종 모델 비교, 이슈 #78/#80)에서 선정한 gemini-3.1-flash-lite.
@@ -58,8 +59,13 @@ def build_llm(model: str):
     if model.startswith(("gemini", "models/gemini")):
         from langchain_google_genai import ChatGoogleGenerativeAI
 
+        # max_retries: 429/503 등 일시적 오류에 LangChain 내장 지수 백오프 (Stage 3-2, #106).
+        # 스트리밍이라 사용자가 기다리는 중이므로 2회로 제한 — 그래도 실패하면 router가
+        # 친절한 에러로 degrade. 일일 quota 소진은 재시도해도 안 풀리지만 예외 텍스트로만
+        # 구분되고 몇 초 손해뿐이라 여기서 나누지 않는다(errors.classify_llm_error 담당).
         return ChatGoogleGenerativeAI(
-            model=model, google_api_key=os.getenv("GEMINI_API_KEY"), temperature=0
+            model=model, google_api_key=os.getenv("GEMINI_API_KEY"),
+            temperature=0, max_retries=2,
         )
     if model.startswith(("gpt", "o1", "o3", "o4", "chatgpt")):
         from langchain_openai import ChatOpenAI

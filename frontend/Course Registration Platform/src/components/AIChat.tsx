@@ -149,7 +149,8 @@ export function AIChat({ user, authToken }: AIChatProps) {
       setToolActivity(null);
       setStreamingText((prev) => prev + payload.text);
     } else if (event === 'error') {
-      setError(payload.detail || 'AI 응답 생성 중 오류가 발생했습니다.');
+      // Stage 3-2: 서버가 분류한 안내 메시지(payload.message). 구버전 호환으로 detail도 확인.
+      setError(payload.message || payload.detail || 'AI 응답 생성 중 오류가 발생했습니다.');
     }
     // 'done'은 스트림 종료 처리(finally)에서 함께 마무리한다.
   };
