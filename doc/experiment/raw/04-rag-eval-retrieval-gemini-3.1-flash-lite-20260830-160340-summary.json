@@ -1,0 +1,29 @@
+{
+  "meta": {
+    "mode": "retrieval",
+    "model": "gemini-3.1-flash-lite",
+    "started_at": "2026-08-30T16:03:40",
+    "finished_at": "2026-08-30T16:04:02",
+    "questions_file": "/app/eval/rag_questions.yaml"
+  },
+  "n_reps": 1,
+  "n_rows": 35,
+  "n_errors": 0,
+  "by_kind": {
+    "hit": {
+      "n": 35,
+      "pass_rate": 1.0,
+      "hit_at_1": 0.9714,
+      "hit_at_3": 1.0,
+      "hit_at_5": 1.0,
+      "search_syllabus_called_rate": null,
+      "answer_names_course_rate": null
+    }
+  },
+  "overall_pass_rate": 1.0,
+  "stability": {
+    "scenarios_scored": 35,
+    "fully_passing_all_reps": 35,
+    "flaky_scenarios": []
+  }
+}

@@ -242,6 +242,54 @@ def _pct(v):
     return "  n/a" if v is None else f"{v * 100:5.1f}%"
 
 
+def rescore(raw_path: Path, questions_path: Path, out_dir: Path, label: str) -> None:
+    """저장된 raw(jsonl)를 현재 rag_scoring/rag_questions 로 재채점 (에이전트 호출 없음).
+
+    rag_scoring.py 는 순수 함수라 저장된 tool_calls/retrieved/answer 만으로 동일 채점된다.
+    채점 로직·라벨을 고쳤을 때 모델을 다시 안 돌리고 재집계하는 용도(#82 패턴).
+    """
+    items = {it["id"]: it for it in load_items(questions_path)}
+    mode = None
+    name_by_code: Dict[str, str] = {}
+    rows: List[Dict[str, Any]] = []
+    reps: set = set()
+    with raw_path.open(encoding="utf-8") as fh:
+        for line in fh:
+            r = json.loads(line)
+            reps.add(r["rep"])
+            it = items.get(r["scenario_id"])
+            if it is None or r.get("error"):
+                rows.append(r)
+                continue
+            if "04-rag-eval-retrieval" in raw_path.name:
+                r["scores"] = score_retrieval(it, r.get("retrieved") or [])
+            elif "04-rag-eval-naive" in raw_path.name:
+                if not name_by_code:
+                    _, name_by_code = build_corpus()
+                r["scores"] = score_naive(it, r.get("answer") or "", name_by_code)
+            else:
+                r["scores"] = score_agent(it, r.get("tool_calls") or [],
+                                          r.get("retrieved"), r.get("answer") or "")
+            rows.append(r)
+
+    m = re.search(r"04-rag-eval-(retrieval|agent|naive)", raw_path.name)
+    mode = m.group(1) if m else "agent"
+    meta = {"mode": f"{mode} (rescore)", "source_raw": str(raw_path)}
+    summary = summarize_rag(rows, len(reps), meta)
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    tag = f"-{label}" if label else ""
+    stem = f"{raw_path.stem}-rescored{tag}-{stamp}"
+    (out_dir / f"{stem}.jsonl").write_text(
+        "\n".join(json.dumps(r, ensure_ascii=False) for r in rows) + "\n", encoding="utf-8")
+    (out_dir / f"{stem}-summary.json").write_text(
+        json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+    print_summary(summary, mode)
+    print(f"재채점 원본: {raw_path}")
+    print(f"재채점 결과: {out_dir / (stem + '-summary.json')}")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="RAG hit rate 측정 (Stage 1-4)")
     ap.add_argument("--mode", choices=["retrieval", "agent", "naive"], default="agent")
@@ -254,7 +302,13 @@ def main() -> None:
     ap.add_argument("--retries", type=int, default=3)
     ap.add_argument("--retry-wait", type=float, default=30.0)
     ap.add_argument("--label", default="")
+    ap.add_argument("--rescore", type=Path, default=None,
+                    help="저장된 raw jsonl을 현재 채점 로직/라벨로 재채점만 한다 (모델 호출 없음)")
     args = ap.parse_args()
+
+    if args.rescore:
+        rescore(args.rescore, args.questions, args.out_dir, args.label)
+        return
 
     if args.model:
         os.environ["CHAT_MODEL"] = args.model

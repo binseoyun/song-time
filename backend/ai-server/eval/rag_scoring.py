@@ -39,6 +39,10 @@ def _no_forbidden(answer: str, forbidden: Optional[Iterable[str]]) -> Optional[b
     return not any(str(f) in low for f in forbidden)
 
 
+def _nospace(s: str) -> str:
+    return "".join(str(s).split())
+
+
 def _mentions_not_registered(answer: str) -> bool:
     a = answer or ""
     return any(k in a for k in ("등록되어 있지 않", "등록되지 않", "미등록", "등록된 강의계획서가 없",
@@ -120,7 +124,9 @@ def score_naive(item: Dict[str, Any], answer: str, name_by_code: Dict[str, str])
 
     if kind == "hit":
         names = [name_by_code.get(c, "") for c in _expect_codes(item)]
-        s["answer_names_course"] = any(n and n in (answer or "") for n in names)
+        # 모델이 "소프트웨어의이해"를 "소프트웨어의 이해"로 재표기하는 경우가 있어 공백 무시 비교
+        ans = _nospace(answer)
+        s["answer_names_course"] = any(n and _nospace(n) in ans for n in names)
         s["answer_no_hallucination"] = _no_forbidden(answer, item.get("answer_must_not_include"))
         s["pass"] = bool(s["answer_names_course"] and s["answer_no_hallucination"] is not False)
     elif kind == "not_registered":

@@ -1,0 +1,44 @@
+{
+  "meta": {
+    "mode": "naive",
+    "model": "gemini-3.1-flash-lite",
+    "started_at": "2026-08-30T16:15:08",
+    "finished_at": "2026-08-30T16:19:53",
+    "questions_file": "/app/eval/rag_questions.yaml"
+  },
+  "n_reps": 3,
+  "n_rows": 126,
+  "n_errors": 0,
+  "by_kind": {
+    "hit": {
+      "n": 105,
+      "pass_rate": 0.9714,
+      "hit_at_1": null,
+      "hit_at_3": null,
+      "hit_at_5": null,
+      "search_syllabus_called_rate": null,
+      "answer_names_course_rate": 0.9714
+    },
+    "not_registered": {
+      "n": 21,
+      "pass_rate": 1.0,
+      "no_hallucination_rate": 1.0,
+      "says_not_registered_rate": 1.0
+    }
+  },
+  "overall_pass_rate": 0.9762,
+  "stability": {
+    "scenarios_scored": 42,
+    "fully_passing_all_reps": 41,
+    "flaky_scenarios": []
+  },
+  "latency_ms": {
+    "p50": 1195.0,
+    "p95": 1682.9,
+    "mean": 1257.6
+  },
+  "tokens": {
+    "total": 1173407,
+    "mean_per_row": 9312.8
+  }
+}
