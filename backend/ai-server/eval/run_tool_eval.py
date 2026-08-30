@@ -21,28 +21,19 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
-import requests
 import yaml
 
-_PARENTS = Path(__file__).resolve().parents
-# 호스트에서 리포 루트째로 실행하면 .../backend/ai-server/eval 라 parents[3]=리포 루트지만,
-# 컨테이너 안에선 /app/eval/... 라 parents가 3개뿐이라 인덱싱이 터진다 — 안전하게 클램프.
-REPO_ROOT = _PARENTS[3] if len(_PARENTS) > 3 else _PARENTS[-1]
-DEFAULT_QUESTIONS = _PARENTS[0] / "questions.yaml"
-# 호스트에서 리포 루트째로 실행하면 doc/experiment/raw 로, 컨테이너 안(WORKDIR=/app)에서
-# 실행하면 그 경로가 없으므로 ./eval-out 로 떨어뜨린다(README는 -v 마운트 + --out-dir 권장).
-_repo_out = REPO_ROOT / "doc" / "experiment" / "raw"
-DEFAULT_OUT_DIR = _repo_out if _repo_out.parent.is_dir() else Path.cwd() / "eval-out"
+from eval._harness import (
+    default_out_dir,
+    invoke_with_retry,
+    preflight_backend,
+    sum_tokens,
+)
+
+DEFAULT_QUESTIONS = Path(__file__).resolve().parent / "questions.yaml"
+DEFAULT_OUT_DIR = default_out_dir()
 
 VALID_EXPECT_TOOLS = {"search_courses", "get_course_by_code", "none", "any", "ignore"}
-# str(exc)를 소문자로 낮춰 부분 매칭한다.
-RATE_LIMIT_MARKERS = ("429", "resourceexhausted", "resource_exhausted", "quota",
-                      "rate limit", "rate_limit", "ratelimit", "too many requests")
-
-
-def _is_rate_limit(err: str) -> bool:
-    low = err.lower()
-    return any(mark in low for mark in RATE_LIMIT_MARKERS)
 
 
 # --------------------------------------------------------------------------- #
@@ -90,36 +81,6 @@ def load_scenarios(path: Path) -> List[Dict[str, Any]]:
 # --------------------------------------------------------------------------- #
 # 에이전트 호출
 # --------------------------------------------------------------------------- #
-def preflight_backend() -> str:
-    base = os.getenv("BACKEND_BASE_URL", "http://localhost:8000")
-    try:
-        resp = requests.get(f"{base}/api/courses", timeout=10)
-        resp.raise_for_status()
-        n = len(resp.json())
-    except Exception as exc:  # noqa: BLE001 - 사용자에게 원인 그대로 보여준다
-        sys.exit(
-            f"[오류] backend 과목 API에 연결할 수 없습니다: {base}/api/courses\n"
-            f"       {exc}\n"
-            f"       docker compose up -d backend_1 (+ db 시딩) 후 다시 실행하세요."
-        )
-    if n == 0:
-        sys.exit(f"[오류] {base}/api/courses 가 0개를 반환했습니다 — 시드 데이터를 넣어주세요.")
-    return f"{base} ({n}과목)"
-
-
-def _sum_tokens(messages) -> Dict[str, int] | None:
-    total = {"input": 0, "output": 0, "total": 0}
-    found = False
-    for m in messages:
-        meta = getattr(m, "usage_metadata", None)
-        if meta:
-            found = True
-            total["input"] += meta.get("input_tokens", 0)
-            total["output"] += meta.get("output_tokens", 0)
-            total["total"] += meta.get("total_tokens", 0)
-    return total if found else None
-
-
 def run_scenario(agent, scenario: Dict[str, Any], rep: int, recursion_limit: int,
                  retries: int, retry_wait: float, turn_sleep: float = 0.0) -> List[Dict[str, Any]]:
     """시나리오 1개(멀티턴 포함)를 rep회차로 1번 실행. turn 결과 리스트를 반환한다.
@@ -154,26 +115,9 @@ def run_scenario(agent, scenario: Dict[str, Any], rep: int, recursion_limit: int
             continue
 
         input_messages = history + [HumanMessage(content=turn["user"])]
-        result = None
-        err = None
-        for attempt in range(retries + 1):
-            t0 = time.perf_counter()
-            try:
-                result = agent.invoke(
-                    {"messages": input_messages},
-                    config={"recursion_limit": recursion_limit},
-                )
-                err = None
-                break
-            except Exception as exc:  # noqa: BLE001
-                err = str(exc)
-                if _is_rate_limit(err) and attempt < retries:
-                    wait = retry_wait * (attempt + 1)
-                    print(f"    · rate limit, {wait:.0f}s 대기 후 재시도 ({attempt + 1}/{retries})")
-                    time.sleep(wait)
-                    continue
-                break
-        latency_ms = round((time.perf_counter() - t0) * 1000, 1)
+        result, err, latency_ms = invoke_with_retry(
+            agent, input_messages, recursion_limit, retries, retry_wait
+        )
 
         if err is not None or result is None:
             broken = True
@@ -185,7 +129,7 @@ def run_scenario(agent, scenario: Dict[str, Any], rep: int, recursion_limit: int
         new_messages = result["messages"][len(input_messages):]
         answer = extract_text(result["messages"][-1].content)
         tool_calls = extract_tool_calls(new_messages)
-        tokens = _sum_tokens(new_messages)
+        tokens = sum_tokens(new_messages)
 
         # 다음 turn 히스토리엔 빈 문자열을 넣지 않는다 — Gemini가 빈 parts 메시지를
         # 400으로 거절해 멀티턴 나머지가 통째로 날아가는 걸 막는다. 채점은 원본 answer로.
