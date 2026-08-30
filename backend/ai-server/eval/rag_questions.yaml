@@ -11,7 +11,7 @@
 # 스키마
 # -----------------------------------------------------------------------------
 #   id                : rag-NN
-#   category          : 의미검색 | 미등록 | 범위밖
+#   category          : 의미검색 | 미등록 | 범위밖 | 라우팅
 #   question          : 사용자 발화
 #   expect_course_code: 정답 과목코드(의미검색). 배열이면 "여러 과목 다 맞음"
 #   expect_kind       :
@@ -20,6 +20,9 @@
 #                       답해야 하고 개요·평가·주차별을 지어내면 안 됨(할루시네이션)
 #       out_of_scope  = 정확한 값(잔여석·정원 등) 질문 → search_syllabus/get_syllabus를
 #                       부르면 "RAG 오선택". get_course_by_code / search_courses가 정답 경로
+#       routing       = 1-3 회귀 세트(현행 37분반 기준). expect_tool 과 일치 + 강의계획서
+#                       Tool 안 부름. 재시딩(#89) 후 questions.yaml 74문항 재라벨은 3-3
+#   expect_tool       : (routing 전용) search_courses | get_course_by_code | any | none
 #   answer_must_not_include : [문자열,...] 최종 답변에 있으면 실패 (미등록 케이스 할루시네이션 감지)
 #   note              : 이 질문이 노리는 것 / 라벨 근거(정독한 강의계획서 섹션)
 #
@@ -386,3 +389,56 @@
   question: "지금 데이터베이스설계와질의 몇 자리 남았어?"
   expect_kind: out_of_scope
   note: "잔여석 → get_course_by_code. get_syllabus를 부르면 오선택"
+
+
+# ===== 라우팅: 1-3(Tool 2개 추가 + 프롬프트 2문장) 회귀 세트. 현행 37분반 기준 =====
+# questions.yaml 74문항은 재시딩(#89) 전 92과목 라벨이라 여기서 소규모로만 방어한다.
+
+- id: rag-47
+  category: 라우팅
+  question: "심준호 교수님이 가르치는 과목 뭐야?"
+  expect_kind: routing
+  expect_tool: search_courses
+  note: "교수명 검색 → search_courses. 강의계획서 Tool 아님"
+
+- id: rag-48
+  category: 라우팅
+  question: "21003183-1 시간표 알려줘"
+  expect_kind: routing
+  expect_tool: get_course_by_code
+  note: "과목 코드 + 시간표(라이브/분반별) → get_course_by_code"
+
+- id: rag-49
+  category: 라우팅
+  question: "네트워크보안 지금 몇 자리 남았어?"
+  expect_kind: routing
+  expect_tool: any
+  note: "실시간 잔여석 → search_courses/get_course_by_code. 강의계획서 Tool 아님"
+
+- id: rag-50
+  category: 라우팅
+  question: "알고리즘이랑 데이터베이스설계와질의 시간표 겹쳐?"
+  expect_kind: routing
+  expect_tool: any
+  note: "시간표 대조 → Class 데이터. 강의계획서 의미검색 아님"
+
+- id: rag-51
+  category: 라우팅
+  question: "오늘 서울 날씨 어때?"
+  expect_kind: routing
+  expect_tool: none
+  note: "완전 범위 밖 — 어떤 Tool도 안 부름"
+
+- id: rag-52
+  category: 라우팅
+  question: "자바프로그래밍 나 대신 신청 좀 해줘"
+  expect_kind: routing
+  expect_tool: none
+  note: "신청 대행 거절(§9). 거절하며 조회 Tool도 안 부름(Stage 3-1) — 프롬프트 변경 회귀 감지"
+
+- id: rag-53
+  category: 라우팅
+  question: "관심 등록 제일 많은 과목이 뭐야?"
+  expect_kind: routing
+  expect_tool: search_courses
+  note: "interest_count(전체 조회) → search_courses. 강의계획서 아님"

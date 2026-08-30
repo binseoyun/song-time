@@ -35,7 +35,9 @@
   - **파싱 방식·페이로드 스키마 확정(2026-08-29, 이슈 #95)**: 파싱 = **A3**(pdfplumber 파서 대신 수기 `syllabi.yaml` single source of truth — 17청크 규모라 파서는 이미 한 정독 작업의 재구현). A2(파서 + `overrides.yaml`)는 범위 확장 시 재검토. Qdrant 페이로드 스키마·point ID(`uuid5`)·`get_syllabus` 시그니처 확정. ADR-010 §6/§13 재검토 서브섹션 추가.
   - **Class 재시딩 완료(2026-08-30, 이슈 #89)**: `seedData.js` courseData를 소프트웨어학부 2026-2 실데이터 22과목/37분반으로 교체(강의계획서 있는 17과목 전부 포함). Redis 좌석·챗봇 E2E 검증.
   - **Stage 1-2(강의계획서 → Qdrant 적재) 완료(2026-08-30, 이슈 #100)**: PDF 19개 전수 정독 → `syllabi.yaml`(18청크, A3 single source of truth). `backend/ai-server/rag/` 파이프라인(`validate_syllabi`/`ingest --dry-run`/`inspect_qdrant`), `gemini-embedding-001` 비대칭 임베딩(3072d), `docker-compose`에 `qdrant` 추가. 스팟체크 rank-1 정답 5/5. ADR-010 §13에 실행 결과 서브섹션(17→18청크 정정, weekly_plan 8~15주). 설계: Notion "AI 챗봇 RAG 결합 (Stage 1)".
-  - 다음: 1-3 `search_syllabus`/`get_syllabus`를 `chat/tools.py`에 결합 → 1-4 hit rate + naive 프롬프트주입 Before/After.
+  - **Stage 1-3(RAG Tool 결합) 완료(2026-08-31, 이슈 #102)**: `chat/syllabus_tools.py` — `search_syllabus`(top-3, threshold 없음)·`get_syllabus`(course_code 필터, 다중청크 되물음, 미등록 None). TOOLS 2→4, SYSTEM_PROMPT +2문장(A안). 스모크 9케이스 라우팅 100%.
+  - **Stage 1-4(RAG hit rate + naive Before/After) 완료(2026-08-31, 이슈 #104)**: `eval/run_rag_eval.py` 3모드. retrieval hit@3 **100%**, agent 전체 pass **100%**(162 rows, 미등록 할루시네이션 0·범위밖 오호출 0·1-3 회귀 0), naive(Before)도 의미검색 100%. **18청크 규모에선 RAG 정확도 우위 없음** — 실질 이득은 토큰 2.2×↓ + 확장성 + §7 아키텍처 분리. threshold 점수 겹쳐 보류. → [실험 04](experiment/04-결과.md).
+  - 다음: Stage 3-2(장애 폴백) / 3-3(가드레일 전·후 최종 종합 측정 — `questions.yaml` 74문항 재라벨 포함) / 3-4(옛 `/recommend` 제거).
 - [x] Phase 2. 동시성 개선 (진행 중) — 기존 `courseController.js`의 정원 초과 방지 로직 부재 문제(로드맵 P1)를 다룬다. 위 실시간 수강신청 신규 기능과는 별개 트랙.
   - [x] Group A(무방비)/B(비관적 락) API 구현 (#9, 2026-08-10)
   - [x] k6+Prometheus+Grafana 부하테스트 인프라 + 계정 시딩 스크립트 (#13, 2026-08-11)

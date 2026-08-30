@@ -52,7 +52,12 @@
   - **파싱 방식 = A3 확정**(2026-08-29, 이슈 #95, ADR-010 §6 재검토): pdfplumber 파서를 지금 만들지 않고, Stage 1-1 정독 산출물을 `syllabi.yaml`(single source of truth)로 커밋 → 로더는 `YAML → 임베딩 → Qdrant`. PDF 원본은 로컬만, 커밋은 정제된 YAML만. `syllabi.yaml` 스키마 검증 스크립트 포함(필드·`grading` 합 100·`weekly_plan` 8~15주[집중학기 예외]·`course_code` `^\d{8}$`). 분반 병합은 사람이 YAML 작성 시 적용(해시 자동 병합은 A2 파서 도입 시). A2(파서 + `overrides.yaml`)는 범위 확장 시 재검토 — 트리거는 그때 논의.
   - **Qdrant 페이로드 스키마·`get_syllabus` 시그니처 확정**(이슈 #95, ADR-010 §13 재검토): `class_no`는 패딩 없는 `["1","2"]`, `grading`/`weekly_plan`은 네이티브 JSON, `class_codes` 미저장(응답에서 파생), point ID = `uuid5(NS, "{code}__{min class_no}")`, 병합 규칙 = 본문 해시 AND 교수 일치. `get_syllabus(course_code, class_no=None)` — `class_no` 타입 관대하게, 다중 청크면 되물음.
 - [x] 1-3. `search_syllabus`·`get_syllabus`를 `TOOLS`에 추가 (이슈 #102). `chat/syllabus_tools.py` 신설(Qdrant 읽기, chat→rag 단방향). `search_syllabus`=top-3·threshold 없음(1-4에서 결정), `get_syllabus`=course_code 필터·`class_no` 관대·다중 청크 되물음·미등록 None·`covers` 부분 커버리지. `agent.py` SYSTEM_PROMPT는 A안(최소 2문장). 스모크 9케이스 라우팅 100%·할루시네이션 0·기존 회귀 0. 정식 hit rate·74문항 회귀는 1-4.
-- [ ] 1-4. RAG 검색 hit rate 측정(정답 과목코드가 top-k 안에 들어오는 비율) + naive 베이스라인(전체 강의계획서 프롬프트 주입) Before/After — `doc/experiment/`에 원본 저장. **재시딩 선행 필요**
+- [x] 1-4. RAG hit rate + naive Before/After (이슈 #104). `eval/run_rag_eval.py`(retrieval/agent/naive 3모드), `rag_scoring.py`, `_harness.py`(공통), `rag_questions.yaml` 라우팅 +7(54문항).
+  - **retrieval**: hit@1 97.1% / hit@3 **100%** / hit@5 100% (35문항) — k=3 검증
+  - **agent (RAG After)**: 전체 pass **100%** (162 rows), 의미검색 hit@3 100%·search_syllabus 호출 100%, 미등록 할루시네이션 **0%**, 범위밖 Tool 오호출 **0%**, 라우팅(1-3 회귀) **0**. 전 rep pass 54/54. p50 2.4s, 의미검색 turn당 4,268토큰
+  - **naive (Before)**: 의미검색 100%·할루시네이션 0% (동률), turn당 **9,332토큰**(RAG 2.19×), p50 1.2s(RAG보다 빠름)
+  - **해석**: 18청크 규모에선 RAG 정확도 우위 없음·오히려 느림. 실질 이득 = 토큰 2.2×↓ + 확장성 + §7 아키텍처 분리. threshold는 점수 분포 겹쳐서(정답 0.649~0.773 / 오탐 0.630~0.721) **도입 보류**
+  - 문서: `doc/experiment/04-rag-hit-rate-측정계획.md` · `04-결과.md`
 
 ## Stage 2 — 스트리밍 + UI (~2~3일)
 
