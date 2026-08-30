@@ -177,8 +177,8 @@ Pinecone/Chroma/Weaviate/Milvus/Faiss/Qdrant/pgvector/Elasticsearch/pgvecto.rs 9
 |---|---|---|
 | `search_courses(keyword)` 잔여석/키워드 조회 | `GET /api/courses` (Node) | 기존 |
 | `get_course_by_code(code)` 과목 단건 조회 | `GET /api/courses/:code` (Node) | 기존(Stage 0-3 신설) — 매번 전체 리스트를 필터링하는 구조라 Tool 입장에서 비효율이었음 |
-| `search_syllabus(keyword)` 강의계획서 의미 검색 | Qdrant 유사도 검색(`query_points`) | **신설(Stage 1-3)** — "이런 걸 배우고 싶은데 관련 과목 있어?" |
-| `get_syllabus(course_code, class_no?)` 강의계획서 정확 조회 | Qdrant 페이로드 필터 조회(`scroll`/`retrieve`) | **신설(Stage 1-3, 2026-08-27 스코프 추가)** — 개요·교육목표·평가 비중·주교재·선수과목·주차별·교수 이메일 반환. 없으면 "미등록" |
+| `search_syllabus(query)` 강의계획서 의미 검색 | Qdrant 유사도 검색(`search`, top-3) | **신설(Stage 1-3, #102)** — "이런 걸 배우고 싶은데 관련 과목 있어?". threshold 없음(1-4 측정 후 결정) |
+| `get_syllabus(course_code, class_no?)` 강의계획서 정확 조회 | Qdrant 페이로드 필터 조회(`scroll`) | **신설(Stage 1-3, #102)** — 개요·교육목표·평가 비중·주교재·선수과목·주차별·교수 이메일 반환. 다중 청크면 `needs_class_no` 되물음, 없으면 `None`(→ "미등록"), 일부 분반만 있으면 `covers` |
 
 **RAG Tool을 1개에서 2개로 나눈 재검토(2026-08-27, 이슈 #87).** 원래 계획(1-3)은 "강의계획서 의미 검색" Tool 하나였다. §13 확정 과정에서 사용자가 "평가 비중·주교재·교수 이메일 같은 강의계획서 세부 정보도 채팅에서 정확히 답했으면 한다"고 요구했고, 이건 §7 원칙상 similarity 검색이 아니라 정확 조회여야 한다(정답이 하나로 정해진 값). 벡터 DB(Qdrant, §4)는 같은 컬렉션을 벡터 유사도 검색과 페이로드(메타데이터) 필터 조회로 둘 다 접근할 수 있어, `search_syllabus`(발견)와 `get_syllabus`(조회)로 나눴다. `get_syllabus`는 `get_course_by_code`에 병합하지 않았다 — `get_course_by_code`는 Node의 라이브 데이터, `get_syllabus`는 ai-server의 Chroma로 데이터 소스가 다르고, 병합하면 한쪽만 있는 경우(강의계획서 없는 과목, `Class`에만 있는 과목)의 처리가 복잡해진다.
 
