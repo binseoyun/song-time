@@ -1,0 +1,140 @@
+# =============================================================================
+# 강의계획서 데이터셋 — RAG single source of truth (파싱 방식 A3, ADR-010 §6 재검토)
+# =============================================================================
+# 소프트웨어학부 2026-2 강의계획서 PDF 19개를 사람이 전수 정독해 옮겨 적은 것.
+# PDF 원본은 커밋하지 않는다(저작권) — 이 YAML이 유일한 소스다.
+# 로더(rag/ingest.py)는 파싱하지 않고 검증·임베딩·Qdrant upsert만 한다.
+#
+# 청크 = 이 리스트의 한 항목. 분반 병합은 여기서 사람이 이미 적용했다:
+#   병합 조건 = 본문(개요+목표+주차별) 동일 AND 교수 동일 → class_no 를 배열로.
+#   (예: 알고리즘 001·002 — 안태훈, 내용 100% 동일 → 1청크 class_no ["1","2"])
+#   내용이나 교수가 다르면 분반별 별도 항목 (예: 경영정보시스템 001 서보밀 / 002 한은정).
+#   19파일 → 17청크.
+#
+# -----------------------------------------------------------------------------
+# 필드 (rag/syllabi.py _REQUIRED / Qdrant 페이로드 스키마 ADR-010 §13 재검토)
+# -----------------------------------------------------------------------------
+#   course_code       : 숫자 8자리 (분반번호 제외). Node Class.code 의 앞부분과 정렬
+#   class_no          : 패딩 없는 분반번호 배열 ["1","2"]  ("001" 아님)
+#   course_name       : 과목명
+#   professor         : 담당교수 (분반 내용이 다르면 청크 구분자)
+#   professor_email   : E-Mail
+#   department        : "소프트웨어학부" (개설학과 — 교수 소속이 아니라 Class 와 맞춤)
+#   credits           : 학점 (정수)
+#   method            : 강의형태 — "대면" | "비대면" | "혼합"
+#   teaching_methods  : §2에서 (V) 표시된 강의방법 (짧은 한글 라벨 배열)
+#   prerequisites     : 선수과목. 강의계획서에 명시 없으면 ""  (추론해 넣지 않는다)
+#   textbook          : 주교재
+#   reference         : 참고문헌 (여러 개면 "; " 로 연결)
+#   exam_schedule     : 중간·기말 일정 (강의계획서 표기 그대로)
+#   overview          : §1-1) 교과목 개요 (산문, 임베딩 본문에 들어감)
+#   objectives        : §1-2) 교육목표 (산문, 임베딩 본문에 들어감)
+#   grading           : [{type, weight}, ...]  weight 합 = 100
+#   weekly_plan       : [{week: 1..15, theme}]  정확히 15주
+#   source_pdf        : 정독한 원본 PDF 파일명 배열
+#
+# 임베딩 본문(rag/syllabi.py embedding_text): 메타 헤더 + 개요 + 목표 + 선수과목 +
+#   강의방법 + 주차별 주제 15개. 구조화 필드(평가·교재·이메일 등)는 페이로드로만 저장.
+# =============================================================================
+
+syllabi:
+
+  # --- 전공필수 --------------------------------------------------------------
+
+  - course_code: "21000549"
+    class_no: ["1", "2"]
+    course_name: "알고리즘"
+    professor: "안태훈"
+    professor_email: "taehoon@sookmyung.ac.kr"
+    department: "소프트웨어학부"
+    credits: 3
+    method: "대면"
+    teaching_methods: ["컴퓨터보조학습", "OHP"]
+    prerequisites: ""
+    textbook: "Algorithms — Jeff Erickson (online)"
+    reference: "Introduction to Algorithms, 4th ed. — Thomas H. Cormen 외 (MIT Press)"
+    exam_schedule: "중간고사 10/24(토) 오후 2시, 기말고사 12/12(토) 오후 2시"
+    overview: >
+      컴퓨터 알고리즘에 대해 이해하고, 대표적인 알고리즘 기법들을 배우고 이들을
+      프로그래밍하는 방법을 학습한다.
+    objectives: >
+      알고리즘 분석법을 이해한다. Divide and conquer, dynamic programming,
+      greedy algorithm, graph algorithm에 대해 이해하고 프로그래밍할 수 있는
+      능력을 기른다.
+    grading:
+      - {type: "프로그래밍 과제", weight: 10}
+      - {type: "알고리즘 설계 과제", weight: 20}
+      - {type: "중간고사", weight: 35}
+      - {type: "기말고사", weight: 35}
+    weekly_plan:
+      - {week: 1, theme: "강의 개요 및 소개"}
+      - {week: 2, theme: "Analyzing algorithms (correctness and running time)"}
+      - {week: 3, theme: "Recursion (1)"}
+      - {week: 4, theme: "Recursion (2)"}
+      - {week: 5, theme: "Dynamic programming (1)"}
+      - {week: 6, theme: "Dynamic programming (2)"}
+      - {week: 7, theme: "Algorithm programming (1)"}
+      - {week: 8, theme: "중간고사"}
+      - {week: 9, theme: "Greedy algorithms"}
+      - {week: 10, theme: "Graph representation & Basic graph algorithms"}
+      - {week: 11, theme: "Advanced graph algorithms"}
+      - {week: 12, theme: "NP-completeness (1)"}
+      - {week: 13, theme: "NP-completeness (2)"}
+      - {week: 14, theme: "Algorithm programming (2)"}
+      - {week: 15, theme: "기말고사"}
+    source_pdf: ["알고리즘1.pdf", "알고리즘2.pdf"]
+
+  # --- 전공선택 --------------------------------------------------------------
+
+  - course_code: "21001083"
+    class_no: ["1"]
+    course_name: "경영정보시스템"
+    professor: "서보밀"
+    professor_email: "bmsuh@sookmyung.ac.kr"
+    department: "소프트웨어학부"
+    credits: 3
+    method: "대면"
+    teaching_methods: ["질의응답", "유인물", "시청각", "컴퓨터보조학습", "OHP"]
+    prerequisites: ""
+    textbook: "김우주·백동현·서우종·서창교 공역, 『경영정보시스템』 제18판, 경문사, 2025"
+    reference: >
+      Laudon & Laudon, Management Information Systems, 18th ed. (Pearson, 2026);
+      Laudon & Laudon, Essentials of MIS, 15th ed. (Pearson, 2024);
+      Turban 외, Information Technology for Management, 13th ed. (Wiley, 2025);
+      Baltzan & Phillips, Business Driven Information Systems, 9th ed. (McGraw-Hill, 2024)
+    exam_schedule: "중간고사 10/22(목), 기말고사 12/10(목) — 해당일 수업시간 중"
+    overview: >
+      기업에 있어 정보는 전략의 실현과 경쟁우위 확보를 위한 핵심 자원이 되었다.
+      기업의 효과적·효율적 경영을 위해서는 관련 정보를 수집·분석·활용하는 것이
+      필수적이다. 기업 경영자는 변화하는 정보기술 환경에 적응하고 새로운 비즈니스
+      이슈를 도출하여 조직의 발전과 진화를 도모해야 한다. 본 과목에서는 경영학
+      전공자가 기본적으로 알아야 하는 정보기술과 경영정보시스템 관련 사항을
+      종합적으로 다루며, 경영 의사결정 문제를 해결하기 위한 정보기술과
+      경영정보시스템의 전략적 활용 및 관리 방안을 학습한다.
+    objectives: >
+      비즈니스적 관점과 기술적 관점에서 경영정보시스템을 학습해 경영 현장의
+      정보기술 이슈 해결 능력을 함양한다. (1) 경영정보시스템의 개념·유형·역할을
+      이해한다. (2) 정보기술 관련 지식을 학습하고 최신 추세를 파악한다.
+      (3) 경영 의사결정 문제 해결을 위한 정보시스템 활용 방안을 이해한다.
+      (4) 성공적 기업 경영을 위한 정보기술 활용에 대한 통찰력을 함양한다.
+    grading:
+      - {type: "중간고사", weight: 45}
+      - {type: "기말고사", weight: 45}
+      - {type: "출석", weight: 10}
+    weekly_plan:
+      - {week: 1, theme: "교과목 소개"}
+      - {week: 2, theme: "경영정보시스템의 개요 I"}
+      - {week: 3, theme: "경영정보시스템의 개요 II"}
+      - {week: 4, theme: "경영정보시스템의 개요 III"}
+      - {week: 5, theme: "데이터 관리 및 데이터베이스 I"}
+      - {week: 6, theme: "데이터 관리 및 데이터베이스 II"}
+      - {week: 7, theme: "지능형 시스템과 의사결정 지원"}
+      - {week: 8, theme: "중간고사"}
+      - {week: 9, theme: "정보통신과 인터넷 I"}
+      - {week: 10, theme: "정보통신과 인터넷 II"}
+      - {week: 11, theme: "정보통신과 인터넷 III"}
+      - {week: 12, theme: "시스템 분석 및 설계 I"}
+      - {week: 13, theme: "시스템 분석 및 설계 II"}
+      - {week: 14, theme: "전자상거래와 e-비즈니스"}
+      - {week: 15, theme: "기말고사"}
+    source_pdf: ["경정시1.pdf"]
