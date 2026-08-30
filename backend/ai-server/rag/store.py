@@ -43,6 +43,16 @@ def scroll_all(qc: QdrantClient) -> list[models.Record]:
     return records
 
 
+def search(qc: QdrantClient, query_vector: list[float], limit: int = 3):
+    """유사도 검색 — search_syllabus Tool·inspect_qdrant query 공용."""
+    return qc.search(
+        collection_name=COLLECTION,
+        query_vector=query_vector,
+        limit=limit,
+        with_payload=True,
+    )
+
+
 def by_course_code(qc: QdrantClient, course_code: str) -> list[models.Record]:
     records, _ = qc.scroll(
         collection_name=COLLECTION,

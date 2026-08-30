@@ -42,7 +42,7 @@ def _cmd_query(text: str, k: int) -> int:
 
     qc = store.client()
     vec = embed.embed_query(text)
-    hits = qc.search(collection_name=COLLECTION, query_vector=vec, limit=k, with_payload=True)
+    hits = store.search(qc, vec, limit=k)
     print(f'query: "{text}"  (top-{k}, RETRIEVAL_QUERY)')
     for rank, h in enumerate(hits, 1):
         p = h.payload
