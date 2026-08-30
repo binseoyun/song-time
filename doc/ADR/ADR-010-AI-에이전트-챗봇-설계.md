@@ -403,6 +403,17 @@ Qdrant point ID는 unsigned int 또는 UUID만 허용한다(`"21000549__1"` 같�
 - **B-alt3 페이로드에 `class_codes`만 두고 `class_no` 제거**: 위에서 `class_codes` 저장 자체를 안 하기로 했으므로 무효. `class_no`가 후필터·되물음 라벨에 필요.
 - **B-alt4 정확 조회용 별도 컬렉션/관계형 테이블**: §13 본문(별도 SQL 테이블 없음)에서 이미 기각. 한 컬렉션을 유사도 검색과 페이로드 필터로 둘 다 접근하는 게 맞다.
 
+### Stage 1-2 실행 결과 (2026-08-30, 이슈 #100) — A3로 실제 전사
+
+`syllabi.yaml`을 PDF 19개 전수 정독으로 작성하고 `rag/ingest.py`로 Qdrant에 적재하며 확정된 사실:
+
+- **청크 수 = 18 (17 아님).** §13 본문·§6 재검토 표의 "19파일 → 17청크"는 산술 오류다. 병합 케이스는 알고리즘 001+002 **1건뿐**이므로 19 − 1 = 18이다. 17개는 *과목코드* 수(경영정보시스템 001/002가 같은 코드 `21001083`의 별도 청크). Notion Stage 1 페이지·`rag_questions.yaml` 헤더도 이 숫자로 정정 필요.
+- **일부 분반만 강의계획서가 있는 과목**(데베설·리눅스·디지털논리회로·자바 — 001만 제공): 해당 청크의 `class_no`는 제공된 분반만 담는다. 디지털논리회로는 예외적으로 **002만** 제공됨. `get_syllabus`가 "이 강의계획서는 N분반 기준" 신호를 준다(§13 본문·툴 description).
+- **`weekly_plan` 검증 규칙 완화: "정확히 15주" → "8~15주".** 영상정보처리(21003187)는 집중학기 과목이라 실제 수업이 8주다. 8주 미만은 전사 누락으로 보고 검증 실패시킨다. `grading` 합 100·`course_code` `^\d{8}$`·`class_no` 패딩 없음은 그대로.
+- **임베딩 = `gemini-embedding-001`, 3072차원, `task_type=RETRIEVAL_DOCUMENT`.** 쿼리는 `RETRIEVAL_QUERY`. 벡터를 직접 계산해 Qdrant `upsert`(스토어 임베딩 함수 미사용 → task_type 제어 유지).
+- **재적재 방식 = `recreate_collection`** (§4 재검토 (a)안). 학기당 1회·수동이라 재생성 중 수 초 빈결과 감수. alias 스왑(b안)은 이 빈도에 과함 — 필요 시 도입.
+- 파이프라인 코드: `backend/ai-server/rag/` (`syllabi.yaml`, `validate_syllabi.py`, `ingest.py --dry-run`, `inspect_qdrant.py list|show|query`). `docker-compose.yml`에 `qdrant` 서비스 추가(호스트 포트 미노출).
+
 ## 14. 측정 계획 (Before/After, 로드맵 원칙 적용)
 
 새 기능이라 비교 대상이 없는 게 아니라, 실시간 수강신청 때처럼 "가드레일 없는 baseline → 개선 → 재측정" 구조로 수치를 남긴다:
