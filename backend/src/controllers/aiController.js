@@ -44,8 +44,23 @@ exports.chat = async (req, res) => {
     } else if (error.response?.data) {
       detail = error.response.data;
     }
+    const status = error.response?.status || 500;
+
+    // ai-server의 rate limit(§15, #108) 429는 사용자에게 그대로 전달한다 — ai-server가
+    // FastAPI HTTPException으로 {"detail": "...초 후에..."} + Retry-After를 준다.
+    if (status === 429) {
+      let userMessage = '메시지를 너무 자주 보냈어요. 잠시 후 다시 시도해 주세요.';
+      try {
+        const parsed = typeof detail === 'string' ? JSON.parse(detail) : detail;
+        if (parsed?.detail) userMessage = parsed.detail;
+      } catch (_) { /* 파싱 실패 시 기본 문구 */ }
+      const retryAfter = error.response?.headers?.['retry-after'];
+      if (retryAfter) res.set('Retry-After', retryAfter);
+      return res.status(429).json({ message: userMessage });
+    }
+
     console.error('AI 챗봇 통신 에러:', detail);
-    res.status(error.response?.status || 500).json({
+    res.status(status).json({
       message: 'AI 챗봇과 통신 중 오류가 발생했습니다.',
       detail,
     });

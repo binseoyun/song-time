@@ -445,6 +445,21 @@ Qdrant point ID는 unsigned int 또는 UUID만 허용한다(`"21000549__1"` 같�
 
 **구체적인 윈도우 길이·허용 횟수·§10의 N(작업 메모리로 유지할 턴 수)은 지금 정하지 않는다.** 실사용 패턴을 모른 채 숫자를 먼저 정하면 로드맵의 "naive/baseline 먼저, 측정 후 개선" 원칙(§14)과 어긋난다 — Stage 3 실측 단계에서 실제 호출 분포를 보고 확정한다.
 
+### 재검토 (2026-08-31, Stage 3-0 / 이슈 #108) — Node 계층 → ai-server 계층
+
+**계기.** 구현하려 보니 "Node 계층 + Group C Redis"가 완전 MSA 분리 방향과 어긋났다. Node의 4개 레플리카(`backend_1~4`, 실험 #57에서 대기열 부하 때문에 수평 확장)가 채팅 요청을 로드밸런싱하므로 카운터를 공유해야 하는데, 정작 그 카운터는 *챗봇 서비스*(`ai-server`)의 비용(Gemini 토큰)에 관한 것이다. 챗봇이 자기 비용을 제일 잘 알고, `redis-chat`도 자기가 소유한다.
+
+**MSA에서 rate limit 계층 (일반론).** 정석은 두 계층을 같이 둔다:
+1. **API Gateway (coarse)** — 모든 트래픽이 통과하는 관문에서 "요청 수" 기준. auth·TLS·라우팅과 함께 (Kong/Envoy/AWS API Gateway).
+2. **서비스 자체 (fine)** — 각 서비스가 자기 도메인 비용 기준으로. 게이트웨이 우회 경로 방어 + 서비스가 자기 비용을 제일 잘 앎.
+
+LLM 토큰 비용은 "요청 수"가 아니라 "사용자별 호출 빈도"로 관리해야 하고 그 비용 구조를 아는 건 `ai-server`다. 이 프로젝트는 아직 전용 게이트웨이가 없고(Node가 겸업) 성숙한 계층 1이 없으므로 **계층 2(서비스 자체)부터 구현**한다. 향후 전용 API Gateway 도입 시 거기에 coarse 계층을 얹으면 된다.
+
+**변경.** rate limit은 `ai-server`의 `POST /api/ai/chat` 진입부에서 `redis-chat`(이 서비스 소유) 카운터로 건다. Node는 인증만 하고 `x-user-id`를 넘긴다. `INCR`+`EXPIRE`는 Lua로 원자화(두 명령 사이 프로세스 종료 시 "만료 없는 영구 카운터" 방지, redis-py `register_script`). Redis 장애 시 fail-open. §10의 "Rate limit 카운터는 `redis-chat`이 아니라 Group C Redis" 문장도 이에 맞춰 무효화 — `chat:ratelimit:*` 네임스페이스로 `redis-chat`에 둔다(작업 메모리 `chat:history:*`와 키 분리, 별도 커넥션).
+
+- 코드: `backend/ai-server/chat/rate_limit.py` + `chat/test_rate_limit.py`. Node `aiController.chat`은 ai-server의 429(`{detail}` + `Retry-After`)를 파싱해 사용자에게 전달.
+- 값: `CHAT_RATE_LIMIT=20` / `CHAT_RATE_WINDOW_SEC=60` (env, placeholder — Stage 3-3에서 실측 후 확정).
+
 ## 16. 범위 밖 (이번 ADR에서는 다루지 않음)
 
 - 실제 구현(→ `doc/AI-에이전트-구현계획.md`, Stage별 이슈로 분리)
