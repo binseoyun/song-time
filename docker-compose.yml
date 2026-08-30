@@ -230,6 +230,17 @@ services:
       timeout: 5s
       retries: 5
 
+  # 강의계획서 RAG 벡터 스토어 — ai-server가 소유(redis-chat/db-chat과 동일 원칙).
+  # 로컬은 컨테이너 1개, K8s는 공식 Helm, 프로덕션은 자체호스팅/Qdrant Cloud로
+  # 같은 클라이언트 API 연속(ADR-010 §4 재검토, 이슈 #91). 호스트 포트는 노출하지
+  # 않는다 — 적재 스크립트도 `docker compose exec ai-server`로 내부망에서 돈다.
+  # 코퍼스가 17벡터(강의계획서)라 스냅샷/HA는 불필요, 재적재는 수동 wipe-and-reload.
+  qdrant:
+    image: qdrant/qdrant:v1.12.4
+    volumes:
+      - qdrant_data:/qdrant/storage
+    restart: unless-stopped
+
   ai-server:
     build:
       context: ./backend/ai-server
@@ -243,6 +254,8 @@ services:
       db-chat:
         condition: service_healthy
       redis-chat:
+        condition: service_started
+      qdrant:
         condition: service_started
     # 호스트 포트 직접 노출 제거(ADR-010 §11, 이슈 #31/#83) — 정상 경로가 전부
     # nginx→Node를 거치므로(인증·rate limit), 이 포트가 열려 있으면 인증을 우회해
@@ -281,4 +294,5 @@ services:
 volumes:
   db_data:
   db_chat_data:
+  qdrant_data:
 
