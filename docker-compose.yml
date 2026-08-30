@@ -257,6 +257,10 @@ services:
         condition: service_started
       qdrant:
         condition: service_started
+    # 기동 시 Alembic 마이그레이션을 먼저 돌린다(backend_1의 seedData.js와 같은 패턴) —
+    # db_chat_data 볼륨을 지운 뒤(down -v) chat_sessions/chat_messages 테이블이 없어
+    # 챗봇이 세션 생성에서 깨지는 걸 막는다. 멱등(이미 head면 no-op).
+    command: sh -c "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 5000"
     # 호스트 포트 직접 노출 제거(ADR-010 §11, 이슈 #31/#83) — 정상 경로가 전부
     # nginx→Node를 거치므로(인증·rate limit), 이 포트가 열려 있으면 인증을 우회해
     # Gemini 토큰 비용을 유발시킬 수 있는 표면만 남는다. ai-server는 Docker 내부망에서만

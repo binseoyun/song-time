@@ -26,6 +26,7 @@ from . import cache, store
 from .agent import RECURSION_LIMIT, get_agent
 from .errors import STREAM_CUT_SUFFIX, classify_llm_error
 from .message_utils import extract_text, extract_tool_calls
+from .rate_limit import RateLimitExceeded, check_rate_limit
 
 logger = logging.getLogger("chat")
 router = APIRouter(prefix="/api/ai", tags=["chat"])
@@ -155,6 +156,17 @@ def chat(
 ):
     if not request.message or not request.message.strip():
         raise HTTPException(status_code=400, detail="message는 비어 있을 수 없습니다.")
+
+    # 사용자 단위 rate limit — Gemini 토큰을 쓰는 이 엔드포인트만(§15 재검토, #108).
+    # 스트림 시작 전이라 429를 상태코드로 정상 반환할 수 있다.
+    try:
+        check_rate_limit(user_id)
+    except RateLimitExceeded as exc:
+        raise HTTPException(
+            status_code=429,
+            detail=f"메시지를 너무 자주 보냈어요. {exc.retry_after}초 후에 다시 시도해 주세요.",
+            headers={"Retry-After": str(exc.retry_after)},
+        )
 
     # 세션 검증·이력 로딩은 스트림 시작 전에 끝낸다 — StreamingResponse가 시작되면
     # 상태코드를 못 바꾸므로 401/403/404는 반드시 여기서 난다.
