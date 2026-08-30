@@ -1,12 +1,17 @@
-"""AI 챗봇 Tool 인벤토리(ADR-010 §8) — read-only 2개만 연동한다.
+"""AI 챗봇 Tool 인벤토리(ADR-010 §8) — read-only 4개.
 대기열 순번 조회는 설계상 의도적으로 제외됐다(§8) — Tool 파라미터에도 사용자 식별자가
-필요 없어, 여기 두 Tool은 로그인 여부와 무관하게 항상 같은 답을 반환하는 공개 데이터다.
+필요 없어, 여기 Tool들은 로그인 여부와 무관하게 항상 같은 답을 반환하는 공개 데이터다.
+
+- search_courses / get_course_by_code : Node API (실시간 잔여석·시간표·정원·교수)
+- search_syllabus / get_syllabus      : Qdrant 강의계획서 (개요·평가·주차별·주교재) — syllabus_tools.py
 """
 import os
 from typing import Any, Dict, List
 
 import requests
 from langchain_core.tools import tool
+
+from .syllabus_tools import get_syllabus, search_syllabus
 
 BACKEND_BASE_URL = os.getenv("BACKEND_BASE_URL", "http://localhost:8000")
 _WEEKDAY_LABELS = ["일", "월", "화", "수", "목", "금", "토"]
@@ -120,4 +125,4 @@ def get_course_by_code(code: str) -> Dict[str, Any]:
     return summary
 
 
-TOOLS = [search_courses, get_course_by_code]
+TOOLS = [search_courses, get_course_by_code, search_syllabus, get_syllabus]
