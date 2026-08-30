@@ -1,5 +1,6 @@
 # backend/ai-server/main.py
 import json
+import logging
 import os
 from typing import Dict, Any, List, Optional
 
@@ -15,6 +16,9 @@ from scheduler import generate_schedule
 
 # .env 파일 로드
 load_dotenv()
+
+# 챗봇 장애 로깅(Stage 3-2) — raw 예외는 클라이언트로 안 보내고 여기로만 남긴다.
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
 
 # 1. Gemini 설정
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")

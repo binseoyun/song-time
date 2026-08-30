@@ -11,6 +11,7 @@ from typing import Any, Dict, List
 import requests
 from langchain_core.tools import tool
 
+from .errors import TOOL_ERROR_COURSES
 from .syllabus_tools import get_syllabus, search_syllabus
 
 BACKEND_BASE_URL = os.getenv("BACKEND_BASE_URL", "http://localhost:8000")
@@ -95,9 +96,12 @@ def search_courses(keyword: str = "") -> List[Dict[str, Any]]:
     요일/시간(시간표)이 필요할 때만 get_course_by_code를 추가로 호출한다. keyword를 비우면
     개설된 전체 과목을 반환한다. 과목 코드(예: 21003183-1)를 정확히 알 때는
     get_course_by_code를 쓴다."""
-    response = requests.get(f"{BACKEND_BASE_URL}/api/courses", timeout=10)
-    response.raise_for_status()
-    courses = _filter_courses(response.json(), keyword)
+    try:
+        response = requests.get(f"{BACKEND_BASE_URL}/api/courses", timeout=10)
+        response.raise_for_status()
+        courses = _filter_courses(response.json(), keyword)
+    except requests.RequestException:
+        return [{"error": TOOL_ERROR_COURSES}]  # 과목 API 장애 → 에이전트가 안내 (Stage 3-2)
     return [_summarize(c) for c in courses]
 
 
@@ -107,11 +111,14 @@ def get_course_by_code(code: str) -> Dict[str, Any]:
     요일/시간(시간표), remaining_seats(실시간 잔여석), registered_count(실시간 신청자 수),
     interest_count(관심 등록·하트 수) 등 상세 정보를 반환한다. 과목명이나 교수명만 알 때는
     search_courses를 쓴다."""
-    response = requests.get(f"{BACKEND_BASE_URL}/api/courses/{code}", timeout=10)
-    if response.status_code == 404:
-        return {"error": f"과목 코드 '{code}'를 찾을 수 없습니다."}
-    response.raise_for_status()
-    course = response.json()
+    try:
+        response = requests.get(f"{BACKEND_BASE_URL}/api/courses/{code}", timeout=10)
+        if response.status_code == 404:
+            return {"error": f"과목 코드 '{code}'를 찾을 수 없습니다."}
+        response.raise_for_status()
+        course = response.json()
+    except requests.RequestException:
+        return {"error": TOOL_ERROR_COURSES}  # 과목 API 장애 (Stage 3-2)
 
     summary = _summarize(course)
     summary["schedule"] = [

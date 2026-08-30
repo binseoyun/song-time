@@ -11,6 +11,7 @@ POST /api/ai/chat는 SSE 스트리밍이다(Stage 2-1, ADR-010 §11). 턴당 응
 갱신은 스트림이 끝난 뒤 한 번에 한다(비-스트리밍 때와 동일).
 """
 import json
+import logging
 from typing import Any, Dict, Iterator, List, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException
@@ -23,8 +24,10 @@ from db.session import SessionLocal, get_db
 
 from . import cache, store
 from .agent import RECURSION_LIMIT, get_agent
+from .errors import STREAM_CUT_SUFFIX, classify_llm_error
 from .message_utils import extract_text, extract_tool_calls
 
+logger = logging.getLogger("chat")
 router = APIRouter(prefix="/api/ai", tags=["chat"])
 
 
@@ -67,6 +70,24 @@ class ChatRequest(BaseModel):
     message: str
 
 
+def _persist_turn(session_id: str, user_message: str, answer: str,
+                  tool_calls: Optional[list]) -> None:
+    """대화 1턴을 db-chat + redis-chat 에 기록한다. 실패해도(부분 답변·에러) 항상 호출해
+    사용자 메시지가 유실되지 않게 한다(Stage 3-2). 요청 의존성(get_db)은 제너레이터
+    실행 시점엔 닫혀 있을 수 있어 새 세션을 연다."""
+    db = SessionLocal()
+    try:
+        store.append_message(db, session_id, role="user", content=user_message)
+        store.append_message(
+            db, session_id, role="assistant", content=answer, tool_calls=tool_calls or None
+        )
+    except Exception:  # noqa: BLE001 — db-chat 장애 시에도 스트림 종료는 정상 진행
+        logger.exception("chat turn 기록 실패 (session=%s)", session_id)
+    finally:
+        db.close()
+    cache.append_turn(session_id, user_message, answer)
+
+
 def _stream_chat(session_id: str, input_messages: list, user_message: str) -> Iterator[str]:
     """LangGraph 실행을 SSE 프레임으로 변환하고, 끝난 뒤 영구 기록/캐시를 갱신한다.
 
@@ -75,11 +96,13 @@ def _stream_chat(session_id: str, input_messages: list, user_message: str) -> It
     - token     : 최종 답변의 증분 텍스트
     - done      : 최종 tool_calls 목록(관측값 포함) + 세션 ID
     - error     : 스트림 도중 예외. 이미 200을 보냈으므로 상태코드로는 못 알린다.
+                  raw 예외는 서버 로그에만, 프론트엔는 분류된 안내만 보낸다(Stage 3-2).
     """
     yield _sse("meta", {"session_id": session_id})
 
     agent = get_agent()
     collected: List[Any] = []
+    streamed_text: List[str] = []
     try:
         for mode, chunk in agent.stream(
             {"messages": input_messages},
@@ -91,6 +114,7 @@ def _stream_chat(session_id: str, input_messages: list, user_message: str) -> It
                 if isinstance(message_chunk, AIMessageChunk):
                     text = extract_text(message_chunk.content)
                     if text:
+                        streamed_text.append(text)
                         yield _sse("token", {"text": text})
             elif mode == "updates" and isinstance(chunk, dict):
                 for node_update in chunk.values():
@@ -104,24 +128,21 @@ def _stream_chat(session_id: str, input_messages: list, user_message: str) -> It
                                     "tool_call",
                                     {"tool": call.get("name"), "tool_input": call.get("args")},
                                 )
-    except Exception as exc:
-        yield _sse("error", {"detail": f"AI 응답 생성 중 오류가 발생했습니다: {exc}"})
+    except Exception as exc:  # noqa: BLE001
+        kind, user_msg = classify_llm_error(exc)
+        partial = "".join(streamed_text)
+        phase = "mid_stream" if partial else "start"
+        logger.exception("chat 스트림 실패 (session=%s, kind=%s, phase=%s)",
+                         session_id, kind, phase)
+        yield _sse("error", {"message": user_msg, "kind": kind, "phase": phase})
+        # 부분 답변이 있으면 꼬리표 붙여 저장, 없으면 안내 문구를 assistant 메시지로 남긴다.
+        recorded = (partial + STREAM_CUT_SUFFIX) if partial else f"({user_msg})"
+        _persist_turn(session_id, user_message, recorded, None)
         return
 
     answer = extract_text(collected[-1].content) if collected else ""
     tool_calls = extract_tool_calls(collected)
-
-    # 스트림용으로 새 세션을 연다 — 요청 의존성(get_db)은 이 제너레이터가 실행될 때쯤
-    # 이미 닫혔을 수 있어 재사용하지 않는다.
-    db = SessionLocal()
-    try:
-        store.append_message(db, session_id, role="user", content=user_message)
-        store.append_message(
-            db, session_id, role="assistant", content=answer, tool_calls=tool_calls or None
-        )
-    finally:
-        db.close()
-    cache.append_turn(session_id, user_message, answer)
+    _persist_turn(session_id, user_message, answer, tool_calls)
 
     yield _sse("done", {"session_id": session_id, "tool_calls": tool_calls})
 

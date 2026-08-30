@@ -15,6 +15,8 @@ from langchain_core.tools import tool
 
 from rag import embed, store
 
+from .errors import TOOL_ERROR_SYLLABUS
+
 _SEARCH_TOP_K = 3
 # 1-3 에서는 컷오프를 두지 않는다. rag_questions.yaml 35개 점수 분포를 본 뒤
 # 1-4 에서 정답/무관 갭이 보이면 그때 박는다(측정 후 결정).
@@ -48,8 +50,11 @@ def search_syllabus(query: str) -> list[dict[str, Any]]:
     없다."""
     if not query or not query.strip():
         return []
-    vector = embed.embed_query(query.strip())
-    hits = store.search(store.client(), vector, limit=_SEARCH_TOP_K)
+    try:
+        vector = embed.embed_query(query.strip())
+        hits = store.search(store.client(), vector, limit=_SEARCH_TOP_K)
+    except Exception:  # noqa: BLE001 — 임베딩 API / Qdrant 장애 → 에이전트가 안내 (Stage 3-2)
+        return {"error": TOOL_ERROR_SYLLABUS}
     results = []
     for h in hits:
         p = h.payload
@@ -83,7 +88,10 @@ def get_syllabus(course_code: str, class_no: str | None = None) -> dict[str, Any
     if m and m.group(2) and class_no is None:
         class_no = m.group(2)
 
-    records = store.by_course_code(store.client(), code)
+    try:
+        records = store.by_course_code(store.client(), code)
+    except Exception:  # noqa: BLE001 — Qdrant 장애 → 에이전트가 안내 (Stage 3-2)
+        return {"error": TOOL_ERROR_SYLLABUS}
     if not records:
         return None
 
