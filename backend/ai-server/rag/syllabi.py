@@ -151,10 +151,13 @@ def _validate_entry(idx: int, e: dict[str, Any]) -> None:
             f"{[(g['type'], g['weight']) for g in grading]}"
         )
 
+    # 대부분 15주. 집중학기 과목(예: 영상정보처리)은 실제 수업 주가 더 적으므로
+    # "15주 정확히"가 아니라 "1..15주, 1부터 연속, theme 비어있지 않음"으로 검증한다
+    # (ADR-010 §13 재검토 — A3 정독 결과 반영). 8주 미만이면 전사 누락을 의심해 실패.
     weekly = e["weekly_plan"]
-    if not isinstance(weekly, list) or len(weekly) != 15:
+    if not isinstance(weekly, list) or not (8 <= len(weekly) <= 15):
         raise SyllabusValidationError(
-            f"{where} weekly_plan 은 15주여야 함 (받음: {len(weekly) if isinstance(weekly, list) else weekly!r})"
+            f"{where} weekly_plan 은 8~15주여야 함 (받음: {len(weekly) if isinstance(weekly, list) else weekly!r})"
         )
     for i, w in enumerate(weekly, start=1):
         if not isinstance(w, dict) or w.get("week") != i or not str(w.get("theme", "")).strip():

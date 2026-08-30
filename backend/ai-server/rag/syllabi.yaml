@@ -9,7 +9,8 @@
 #   병합 조건 = 본문(개요+목표+주차별) 동일 AND 교수 동일 → class_no 를 배열로.
 #   (예: 알고리즘 001·002 — 안태훈, 내용 100% 동일 → 1청크 class_no ["1","2"])
 #   내용이나 교수가 다르면 분반별 별도 항목 (예: 경영정보시스템 001 서보밀 / 002 한은정).
-#   19파일 → 17청크.
+#   19파일 → 18청크 (알고리즘 001+002 병합 1건. Stage 1-1 문서의 "17"은 산술 오류 —
+#   19 - 1 = 18. ADR-010 §13 재검토 참고).
 #
 # -----------------------------------------------------------------------------
 # 필드 (rag/syllabi.py _REQUIRED / Qdrant 페이로드 스키마 ADR-010 §13 재검토)
@@ -30,7 +31,7 @@
 #   overview          : §1-1) 교과목 개요 (산문, 임베딩 본문에 들어감)
 #   objectives        : §1-2) 교육목표 (산문, 임베딩 본문에 들어감)
 #   grading           : [{type, weight}, ...]  weight 합 = 100
-#   weekly_plan       : [{week: 1..15, theme}]  정확히 15주
+#   weekly_plan       : [{week: 1.., theme}]  8~15주 (집중학기 과목은 15주 미만 가능)
 #   source_pdf        : 정독한 원본 PDF 파일명 배열
 #
 # 임베딩 본문(rag/syllabi.py embedding_text): 메타 헤더 + 개요 + 목표 + 선수과목 +
@@ -138,3 +139,753 @@ syllabi:
       - {week: 14, theme: "전자상거래와 e-비즈니스"}
       - {week: 15, theme: "기말고사"}
     source_pdf: ["경정시1.pdf"]
+
+  - course_code: "21001083"
+    class_no: ["2"]
+    course_name: "경영정보시스템"
+    professor: "한은정"
+    professor_email: "ejhan@sookmyung.ac.kr"
+    department: "소프트웨어학부"
+    credits: 3
+    method: "대면"
+    teaching_methods: ["발표", "질의응답", "유인물", "팀티칭", "토의토론", "OHP", "AI활용"]
+    prerequisites: ""
+    textbook: "Kenneth C. Laudon·Jane P. Laudon·Carol Guercio Traver, 『경영정보시스템』 18판, 경문사, 2025"
+    reference: "Paige Baltzan, 『경영정보시스템』 9판, 생능, 2025"
+    exam_schedule: "중간고사 8주차, 기말고사 15주차 (일자 미공지)"
+    overview: >
+      본 교과목은 경영정보시스템(MIS)의 핵심 개념과 기업의 정보 활용 방식을
+      이해하고, 디지털 전환(DX)과 AI Transformation(AX) 시대의 비즈니스 변화와
+      정보시스템의 역할을 학습한다. 주요 MIS 영역을 실제 기업 사례와 함께
+      탐구하며, 팀 워크숍을 통해 AI 시대의 기업 문제를 분석하고 MIS 관점에서
+      해결 방안을 모색한다. 또한 AI 시대에 요구되는 MIS 직무와 역량을 이해하고
+      자신의 경력개발 방향을 탐색해, 정보기술을 활용한 문제해결 능력과 AI 시대에
+      필요한 디지털 비즈니스 역량을 함양한다.
+    objectives: >
+      수강생은 본 교과목을 통해 다음을 수행할 수 있다. 첫째, MIS의 핵심 개념과
+      주요 정보시스템을 설명할 수 있다. 둘째, 기업 사례를 MIS 관점에서 분석할 수
+      있다. 셋째, AI를 활용한 업무 및 서비스 개선 아이디어를 제안할 수 있다.
+      넷째, AX 관점에서 기업의 디지털 혁신을 설명할 수 있다. 다섯째, AI 시대의
+      MIS 직무와 자신의 경력개발 방향을 설계할 수 있다.
+    grading:
+      - {type: "출석", weight: 10}
+      - {type: "수업참여", weight: 15}
+      - {type: "중간고사", weight: 30}
+      - {type: "기말고사", weight: 35}
+      - {type: "AX Career Canvas", weight: 10}
+    weekly_plan:
+      - {week: 1, theme: "비즈니스 중심적 MIS의 이해"}
+      - {week: 2, theme: "DX/AX와 비즈니스 프로세스"}
+      - {week: 3, theme: "전략적 정보시스템 도입 의사결정"}
+      - {week: 4, theme: "MIS 기반구조"}
+      - {week: 5, theme: "데이터와 비즈니스 인텔리전스"}
+      - {week: 6, theme: "인공지능 기술의 이해"}
+      - {week: 7, theme: "AX 워크샵 (1)"}
+      - {week: 8, theme: "중간고사"}
+      - {week: 9, theme: "전사적 애플리케이션"}
+      - {week: 10, theme: "e-비즈니스 모델"}
+      - {week: 11, theme: "디지털 생태계와 플랫폼"}
+      - {week: 12, theme: "시스템 개발과 프로젝트 관리"}
+      - {week: 13, theme: "AI 시대의 MIS와 커리어 AX"}
+      - {week: 14, theme: "AX 워크샵 (2)"}
+      - {week: 15, theme: "기말고사"}
+    source_pdf: ["경정시2.pdf"]
+
+  - course_code: "21002031"
+    class_no: ["1"]
+    course_name: "네트워크보안"
+    professor: "박영훈"
+    professor_email: "yh.park@sookmyung.ac.kr"
+    department: "소프트웨어학부"
+    credits: 3
+    method: "대면"
+    teaching_methods: ["실습", "OHP"]
+    prerequisites: ""
+    textbook: "히로시 유키 저 / 이재광·전태일·조재신 공역, 『알기 쉬운 정보보호개론』 3판, Infinity Books"
+    reference: "William Stallings 저 / 이재광·전태일 공역, 『네트워크 보안 에센셜』 6판, 진샘미디어"
+    exam_schedule: "중간고사 10/20(화) 수업시간, 기말고사 12/10(목) 수업시간 (오프라인)"
+    overview: >
+      컴퓨터 및 네트워크에서 사용되고 있는 보안 기술을 소개한다.
+    objectives: >
+      정보 보안을 이루는 기본 요소들을 이해한다. 정보 보안을 위하여 사용되는
+      여러 가지 암호화 및 인증 기법과 프로토콜 등을 익힌다. 여러 응용 분야에서의
+      정보 보안과 관련된 취약점·위협, 그리고 이들을 위한 해결 방안을 학습한다.
+      블록체인, 양자암호, 양자내성암호와 같은 최신 보안 기술에 대하여 알아본다.
+    grading:
+      - {type: "중간고사", weight: 40}
+      - {type: "기말고사", weight: 40}
+      - {type: "실습", weight: 20}
+    weekly_plan:
+      - {week: 1, theme: "Introduction, 정보보안 개요"}
+      - {week: 2, theme: "암호의 역사"}
+      - {week: 3, theme: "대칭 암호"}
+      - {week: 4, theme: "대칭 암호, 블록 암호 모드"}
+      - {week: 5, theme: "공개 키 암호 (1)"}
+      - {week: 6, theme: "공개 키 암호 (2)"}
+      - {week: 7, theme: "하이브리드 암호 시스템"}
+      - {week: 8, theme: "해시함수, 중간고사"}
+      - {week: 9, theme: "MAC"}
+      - {week: 10, theme: "디지털 서명, 인증서"}
+      - {week: 11, theme: "블록체인"}
+      - {week: 12, theme: "영지식증명, 동형암호"}
+      - {week: 13, theme: "양자암호"}
+      - {week: 14, theme: "양자암호 실습 / 양자내성암호"}
+      - {week: 15, theme: "양자내성암호 / 기말고사"}
+    source_pdf: ["네트워크보안.pdf"]
+
+  - course_code: "21001710"
+    class_no: ["2"]
+    course_name: "디지털논리회로"
+    professor: "정영주"
+    professor_email: "yjeong@sookmyung.ac.kr"
+    department: "소프트웨어학부"
+    credits: 3
+    method: "대면"
+    teaching_methods: ["세미나"]
+    prerequisites: ""
+    textbook: "디지털 논리회로 (김종현 지음)"
+    reference: ""
+    exam_schedule: "중간고사 10/26(월) 18:00-20:30, 기말고사 12/9(수) 18:00-20:30"
+    overview: >
+      본 과목은 소프트웨어학부생을 위한 전공 기초 과목으로, 컴퓨터 하드웨어의
+      핵심인 논리회로의 설계 원리를 학습한다. 이진 시스템과 부울 대수를 시작으로
+      조합회로(가산기, MUX)와 순서회로(레지스터, 카운터)의 구조를 체계적으로 다룬다.
+    objectives: >
+      컴퓨터 하드웨어의 핵심 원리 이해: 디지털 시스템의 기본이 되는 이진 데이터
+      표현과 부울 대수의 수학적 원리를 이해한다. 컴퓨터 핵심 부품 설계 능력 배양:
+      가산기, MUX, 디코더 등 CPU와 메모리를 구성하는 조합회로 및 순서회로의
+      구조를 설계할 수 있다. 소프트웨어적 하드웨어 시뮬레이션 역량 확보: 복잡한
+      물리 장비 대신 파이썬(Python) 라이브러리를 활용해 논리회로를 코드로 구현하고
+      검증하는 능력을 갖춘다. 하드웨어 게이트 수준에서 레지스터와 ALU의 연동
+      과정을 이해함으로써 차기 전공인 컴퓨터 구조론의 기초를 다진다.
+    grading:
+      - {type: "중간고사", weight: 40}
+      - {type: "기말고사", weight: 40}
+      - {type: "출석/참여", weight: 10}
+      - {type: "실습1", weight: 5}
+      - {type: "실습2", weight: 5}
+    weekly_plan:
+      - {week: 1, theme: "Intro, 부울대수"}
+      - {week: 2, theme: "부울대수"}
+      - {week: 3, theme: "부울논리 간소화"}
+      - {week: 4, theme: "부울논리 간소화"}
+      - {week: 5, theme: "부울논리 간소화"}
+      - {week: 6, theme: "조합회로"}
+      - {week: 7, theme: "조합회로"}
+      - {week: 8, theme: "중간고사"}
+      - {week: 9, theme: "조합회로"}
+      - {week: 10, theme: "순차논리"}
+      - {week: 11, theme: "순차논리"}
+      - {week: 12, theme: "순차논리"}
+      - {week: 13, theme: "레지스터"}
+      - {week: 14, theme: "레지스터"}
+      - {week: 15, theme: "기말고사"}
+    source_pdf: ["디지털논리회로.pdf"]
+
+  - course_code: "21009627"
+    class_no: ["1"]
+    course_name: "논리및논술(정보·컴퓨터)"
+    professor: "이현자"
+    professor_email: "hyunjalee@sookmyung.ac.kr"
+    department: "소프트웨어학부"
+    credits: 3
+    method: "대면"
+    teaching_methods: ["발표", "질의응답", "토의토론", "OHP", "AI활용", "실습"]
+    prerequisites: ""
+    textbook: "강의자료"
+    reference: "코어 논리학 (성균관대출판부); 이공계 글쓰기 노하우 (생능출판사)"
+    exam_schedule: "중간고사 9주차, 기말고사(모의수업) — 학생 교육실습 일정에 따라 조정될 수 있음"
+    overview: >
+      정보 컴퓨터 교사로서 지녀야 할 올바른 인성과 교육 철학에 대해 인지하고,
+      이를 바탕으로 논리적 사고의 근본 법칙을 익히고 논술 능력을 함양한다.
+    objectives: >
+      AI 컴퓨터과학 영역에서의 기본 논리와 논리규칙을 익히고, 이를 바탕으로
+      논리적 사고와 판단, 주장, 설득, 입증할 수 있는 역량을 키운다. 컴퓨터과학의
+      개념과 원리를 근거로 문제를 분석하고, 타당한 해결 방법을 설계하며, 그 과정과
+      결과를 논리적으로 서술할 수 있는 능력을 키운다. 교육 과정 변화의 주체로서
+      교사의 역할과 비전에 대해 고찰한다.
+    grading:
+      - {type: "중간고사", weight: 40}
+      - {type: "기말고사(모의수업)", weight: 30}
+      - {type: "출석", weight: 10}
+      - {type: "참여", weight: 5}
+      - {type: "과제", weight: 15}
+    weekly_plan:
+      - {week: 1, theme: "강의 소개"}
+      - {week: 2, theme: "AI, 컴퓨터과학의 논리"}
+      - {week: 3, theme: "Logic basics"}
+      - {week: 4, theme: "Propositional Calculus"}
+      - {week: 5, theme: "Arguments, Rules of Inference"}
+      - {week: 6, theme: "Proof"}
+      - {week: 7, theme: "Categorical Logics"}
+      - {week: 8, theme: "First Order Logics"}
+      - {week: 9, theme: "중간고사, 문제풀이"}
+      - {week: 10, theme: "논리적 글쓰기"}
+      - {week: 11, theme: "미래 지향적 교사의 역할과 역량에 대한 고찰 및 토의"}
+      - {week: 12, theme: "AI, SW 활용 교육자료 발표"}
+      - {week: 13, theme: "(AI, SW 활용 모의수업) 계획안 작성 및 발표"}
+      - {week: 14, theme: "AI활용 모의 수업"}
+      - {week: 15, theme: "기말 토의 및 보고서 작성"}
+    source_pdf: ["논리및논술.pdf"]
+
+  - course_code: "21003183"
+    class_no: ["1"]
+    course_name: "데이터베이스설계와질의"
+    professor: "심준호"
+    professor_email: "jshim@sookmyung.ac.kr"
+    department: "소프트웨어학부"
+    credits: 3
+    method: "대면"
+    teaching_methods: ["질의응답", "초청강의", "유인물", "OHP"]
+    prerequisites: "자료구조, 프로그래밍 기초 과목"
+    textbook: "R. Ramakrishnan & J. Gehrke, Database Management Systems, 3rd ed. (McGraw-Hill, 2003) — lecture notes 제공"
+    reference: "김수희·김응모 외 공역, 『데이터베이스 시스템』"
+    exam_schedule: "중간시험 8주차 금요일(2026.10.23) 15:00-16:30, 기말시험 15주차 금요일(2026.12.11) 15:00-16:30 (1·2·3반 동일 시간)"
+    overview: >
+      데이터베이스 시스템의 구성과 데이터베이스 모델 기법의 대표적인 ER 모델링,
+      정규화 등에 대해 학습한다. 관계형 데이터베이스(relational database) 설계와
+      대표적 질의어인 SQL, 그리고 이의 이론적 배경인 관계형 대수에 대해 배우고,
+      무결성규칙(integrity constraint), 트랜잭션 프로세싱 개념 등을 포함해
+      데이터베이스 시스템의 기본 개념에 대한 이론적 체계를 다진다.
+    objectives: >
+      (1) 데이터베이스와 데이터베이스 시스템에 대한 기초 이론을 습득한다.
+      (2) 데이터베이스 설계의 요구 사항 분석과 설계과정, 대표적 개념적 모델링
+      기법인 ER(Entity Relationship) 모델링을 학습한다. (3) 관계형 모델과 대표적인
+      질의어인 SQL을 익힌다. (4) 컴퓨터전공자로서 데이터베이스 시스템에 대한
+      이해를 위해 트랜잭션 프로세싱, 동시성제어, 회복 복구기법 등을 학습하고
+      관계데이터베이스 정규화 이론을 학습한다.
+    grading:
+      - {type: "중간시험", weight: 45}
+      - {type: "기말시험", weight: 50}
+      - {type: "과제 및 수업참여도", weight: 5}
+    weekly_plan:
+      - {week: 1, theme: "교육 목표·교과내용·일정 소개 / 데이터베이스와 DBMS 전반 소개"}
+      - {week: 2, theme: "개념적 설계 (conceptual design)"}
+      - {week: 3, theme: "ER 모델링"}
+      - {week: 4, theme: "논리적 설계 (logical design)와 관계형 모델 (relational model)"}
+      - {week: 5, theme: "관계대수 (relational algebra)"}
+      - {week: 6, theme: "SQL 질의어 (1)"}
+      - {week: 7, theme: "SQL 질의어 (2)"}
+      - {week: 8, theme: "중간고사"}
+      - {week: 9, theme: "SQL 질의어 (3)"}
+      - {week: 10, theme: "트랜잭션 프로세싱 개념 (1)"}
+      - {week: 11, theme: "트랜잭션 프로세싱 개념 (2) / DBMS 산업계 기술 동향"}
+      - {week: 12, theme: "동시성 제어 (concurrency control)"}
+      - {week: 13, theme: "회복 복구 (recovery)"}
+      - {week: 14, theme: "정규화 (normalization)"}
+      - {week: 15, theme: "기말고사"}
+    source_pdf: ["데베설.pdf"]
+
+  - course_code: "21105803"
+    class_no: ["1"]
+    course_name: "데이터사이언스응용"
+    professor: "조선영"
+    professor_email: "sycho22@sookmyung.ac.kr"
+    department: "소프트웨어학부"
+    credits: 3
+    method: "대면"
+    teaching_methods: ["실습", "OHP"]
+    prerequisites: ""
+    textbook: "자체 교안"
+    reference: ""
+    exam_schedule: "중간·기말 시험 없음 — 전 과정 팀 프로젝트로 평가"
+    overview: >
+      이 과목은 데이터사이언스의 핵심 이론과 기법을 실제 문제 해결에 적용하는
+      응용 중심 과목이다. 학생들은 산업·사회·공공 분야의 데이터를 활용하여
+      문제를 정의하고, 데이터 처리-모델링-평가-시각화-의사결정의 전 과정을
+      수행한다. 실습과 팀 프로젝트를 통해 실제 데이터 기반 문제 해결 능력과
+      협업 능력을 함양한다.
+    objectives: >
+      실제 데이터 기반 문제 정의 및 분석 설계 능력 습득. 머신러닝·통계 모델을
+      활용한 응용 능력 강화. 데이터 시각화 및 결과 해석 능력 배양. 팀 프로젝트를
+      통한 협업 및 실무형 문제 해결 능력 향상.
+    grading:
+      - {type: "프로젝트 기획서", weight: 20}
+      - {type: "중간 발표", weight: 20}
+      - {type: "최종 발표", weight: 15}
+      - {type: "최종 보고서", weight: 15}
+      - {type: "최종 결과물", weight: 30}
+    weekly_plan:
+      - {week: 1, theme: "오리엔테이션 및 데이터사이언스 개요"}
+      - {week: 2, theme: "데이터 수집 및 전처리"}
+      - {week: 3, theme: "인공지능 모델 개발"}
+      - {week: 4, theme: "데이터 시각화 및 결과 분석"}
+      - {week: 5, theme: "프로젝트 팀 구성 및 주제 선정 토의"}
+      - {week: 6, theme: "요구사항 분석 및 토의"}
+      - {week: 7, theme: "기본 설계 검토 및 보고"}
+      - {week: 8, theme: "상세 설계 검토 및 보고"}
+      - {week: 9, theme: "프로토타입 구현 토의 및 보고 (1)"}
+      - {week: 10, theme: "프로토타입 구현 토의 및 보고 (2)"}
+      - {week: 11, theme: "중간 평가 및 발표"}
+      - {week: 12, theme: "프로토타입 구현 토의 및 보고 (3)"}
+      - {week: 13, theme: "프로토타입 구현 토의 및 보고 (4)"}
+      - {week: 14, theme: "프로젝트 결과물 시험/검증/분석 토의 및 보고"}
+      - {week: 15, theme: "프로젝트 결과물 발표 및 토의"}
+    source_pdf: ["데이터사이언스 응용.pdf"]
+
+  - course_code: "21105625"
+    class_no: ["1"]
+    course_name: "딥러닝개론"
+    professor: "홍기범"
+    professor_email: "kb.hong@sookmyung.ac.kr"
+    department: "소프트웨어학부"
+    credits: 3
+    method: "대면"
+    teaching_methods: ["발표", "OHP"]
+    prerequisites: "딥러닝 기초 지식 (「생성형 AI의 이해」 등 선수 과목 권장)"
+    textbook: "ppt 슬라이드"
+    reference: "Ian Goodfellow·Yoshua Bengio·Aaron Courville, Deep Learning (MIT Press, 2016) — https://www.deeplearningbook.org/"
+    exam_schedule: "중간고사 8주차, 기말고사 15주차"
+    overview: >
+      본 교과목은 과목명이 「딥러닝개론」이지만 개론이 아닌 딥러닝의 심화 이론을
+      다루는 수업이다. 딥러닝은 다양한 데이터를 기반으로 신경망(Neural Network)을
+      목적에 맞게 학습시키는 인공지능 분야이다. 본 강의에서는 지금까지 배운
+      데이터-손실 함수-모델 개념을 넘어, 이를 보다 정확히 이해하고 전문성을
+      심화할 수 있도록 근본적인 딥러닝 이론과 원리를 다룬다. 이전에 진행한
+      「생성형 AI의 이해」 수업과 마찬가지로 이론적 내용과 수식 기반의 증명이
+      주요 학습 내용이다.
+    objectives: >
+      딥러닝에 관한 전반적인 학문에 대한 심도있는 이해. 특수한 모델링에 국한되지
+      않은 일반적인 딥러닝 이론적 지식 이해. 딥러닝에 관한 기본적인 연구부터
+      최신 연구까지의 폭넓은 이해.
+    grading:
+      - {type: "중간고사", weight: 40}
+      - {type: "기말고사", weight: 45}
+      - {type: "프로젝트 과제", weight: 10}
+      - {type: "출석", weight: 5}
+    weekly_plan:
+      - {week: 1, theme: "Introduction to Deep Learning (DL)"}
+      - {week: 2, theme: "DL foundation models / Learning strategy of DL"}
+      - {week: 3, theme: "Learning strategy of DL"}
+      - {week: 4, theme: "Optimization"}
+      - {week: 5, theme: "Optimization"}
+      - {week: 6, theme: "Regularization"}
+      - {week: 7, theme: "Conditional learning / Joint learning"}
+      - {week: 8, theme: "Mid term"}
+      - {week: 9, theme: "Transformer"}
+      - {week: 10, theme: "Transformer as a backbone"}
+      - {week: 11, theme: "Multi-modal learning"}
+      - {week: 12, theme: "Generative AI / Energy-based model"}
+      - {week: 13, theme: "Various DL applications / DL in practice (MLOps)"}
+      - {week: 14, theme: "Generalization & Future works"}
+      - {week: 15, theme: "Final term"}
+    source_pdf: ["딥러닝개론.pdf"]
+
+  - course_code: "21001713"
+    class_no: ["1"]
+    course_name: "리눅스시스템"
+    professor: "창병모"
+    professor_email: "chang@sookmyung.ac.kr"
+    department: "소프트웨어학부"
+    credits: 3
+    method: "대면"
+    teaching_methods: ["실습", "OHP"]
+    prerequisites: ""
+    textbook: "창병모, 『리눅스 시스템: 원리와 실제』 개정판, 생능출판사, 2022"
+    reference: "창병모, 『우분투 리눅스 시스템 & 서버』, 생능출판사, 2024"
+    exam_schedule: "중간고사 8주차, 기말고사 15주차"
+    overview: >
+      리눅스 시스템의 원리와 실제를 강의와 실습을 통해 학습한다.
+    objectives: >
+      리눅스 시스템의 원리와 실제를 학습하여 실무에서 리눅스 시스템을 효과적으로
+      활용할 수 있는 능력을 배양한다. 실습은 각자 노트북을 사용해 진행하며, PC에
+      가상머신 VirtualBox를 설치하고 그 위에 Ubuntu 22.04를 설치하여 진행한다.
+    grading:
+      - {type: "중간시험", weight: 30}
+      - {type: "기말시험", weight: 30}
+      - {type: "실습", weight: 30}
+      - {type: "출석", weight: 9}
+      - {type: "수업참여", weight: 1}
+    weekly_plan:
+      - {week: 1, theme: "안전교육 / 유닉스·리눅스 소개 / X윈도우와 데스크톱 환경"}
+      - {week: 2, theme: "기본 명령어"}
+      - {week: 3, theme: "파일 사용"}
+      - {week: 4, theme: "쉘과 명령어 사용"}
+      - {week: 5, theme: "프로세스"}
+      - {week: 6, theme: "인터넷"}
+      - {week: 7, theme: "파일 유틸리티"}
+      - {week: 8, theme: "중간고사"}
+      - {week: 9, theme: "유틸리티"}
+      - {week: 10, theme: "쉘 스크립트"}
+      - {week: 11, theme: "프로그래밍 환경"}
+      - {week: 12, theme: "파일시스템과 파일 입출력"}
+      - {week: 13, theme: "프로세스 원리"}
+      - {week: 14, theme: "시스템관리"}
+      - {week: 15, theme: "기말고사"}
+    source_pdf: ["리눅스.pdf"]
+
+  - course_code: "21003757"
+    class_no: ["1"]
+    course_name: "모바일소프트웨어"
+    professor: "박숙영"
+    professor_email: "blue@sookmyung.ac.kr"
+    department: "소프트웨어학부"
+    credits: 3
+    method: "대면"
+    teaching_methods: ["실습", "OHP"]
+    prerequisites: "JAVA 프로그래밍"
+    textbook: "추후 안내 예정"
+    reference: "강승윤, 『깡샘의 안드로이드 앱 프로그래밍 with 코틀린』, 이지스퍼블리싱; 고돈호, 『이것이 안드로이드다 with 코틀린』, 한빛미디어; 천인국, 『그림으로 쉽게 설명하는 안드로이드 프로그래밍』 6판, 생능출판"
+    exam_schedule: "중간고사 8주차 (10/20 화)"
+    overview: >
+      모바일 소프트웨어 개발을 위한 다양한 플랫폼 및 개발 환경을 살펴보고, 이 중
+      안드로이드 플랫폼에서 자바 기반 모바일 프로그래밍 개발을 목표로 강의 및
+      실습을 진행한다. 안드로이드 프로그래밍의 기본 구성 요소 이해, 안드로이드
+      프로그래밍 능력 배양, 모바일 소프트웨어 기획 및 설계 능력 배양, 프로젝트를
+      통한 문제 해결 능력을 배양하는 것을 목표로 한다.
+    objectives: >
+      안드로이드 플랫폼에서 안드로이드 프로그래밍을 통해 모바일 소프트웨어
+      프로그래밍 능력 및 설계 능력을 배양한다. 세부 목표: 모바일 앱 개발의 기본
+      개념 이해, 안드로이드 플랫폼에서의 개발 환경 및 도구 학습, 모바일 앱 개발에
+      필요한 프로그래밍 기술 습득, 프로젝트를 통한 모바일 앱 기획·설계·구현
+      진행하면서 응용 능력 향상.
+    grading:
+      - {type: "개별 실습 과제", weight: 20}
+      - {type: "중간고사", weight: 30}
+      - {type: "프로젝트 제안서", weight: 15}
+      - {type: "프로젝트 최종 결과물", weight: 30}
+      - {type: "출석", weight: 5}
+    weekly_plan:
+      - {week: 1, theme: "강의 소개 / 모바일 플랫폼 소개 및 개발 도구 / 개발환경 설정 및 안드로이드 앱의 기본 구조"}
+      - {week: 2, theme: "코틀린 기초"}
+      - {week: 3, theme: "코틀린 기초 / 프로젝트 안내 및 팀구성"}
+      - {week: 4, theme: "Jetpack Compose 기초 (@Composable, 기본 UI 컴포넌트, Column·Row·Box·Modifier) / 실습1 카드 UI 만들기"}
+      - {week: 5, theme: "상태 관리와 리스트 구성 / 실습2 Todo 리스트 앱 만들기"}
+      - {week: 6, theme: "앱 화면 구성 기초, 화면 전환(Navigation) / 실습3 로그인 화면 만들기"}
+      - {week: 7, theme: "화면간 데이터 전달과 ViewModel / 실습4 ViewModel을 활용한 Todo 앱 만들기"}
+      - {week: 8, theme: "중간고사"}
+      - {week: 9, theme: "Room 데이터베이스, DataStore (Entity, DAO, Repository) / 실습5 Room DB·DataStore 적용 Todo 앱"}
+      - {week: 10, theme: "Hilt 의존성 주입"}
+      - {week: 11, theme: "Retrofit 외부 API 연동 / 실습: 날씨·뉴스·블로그 피드·쇼핑몰 상품 목록·사용자 검색"}
+      - {week: 12, theme: "다이얼로그와 알림, 권한 처리와 카메라 / 팀별 프로젝트 구현"}
+      - {week: 13, theme: "위치정보, 파이어베이스 연동 / 팀별 프로젝트 구현"}
+      - {week: 14, theme: "팀별 프로젝트 구현"}
+      - {week: 15, theme: "프로젝트 최종 발표 및 최종 보고서 제출"}
+    source_pdf: ["모바일소프트웨어.pdf"]
+
+  - course_code: "21105378"
+    class_no: ["1"]
+    course_name: "학생개설:블록체인"
+    professor: "박영훈"
+    professor_email: "yh.park@sookmyung.ac.kr"
+    department: "소프트웨어학부"
+    credits: 3
+    method: "대면"
+    teaching_methods: ["발표", "실습", "컴퓨터보조학습"]
+    prerequisites: ""
+    textbook: "슬라이드"
+    reference: ""
+    exam_schedule: "중간발표 10/14(수), 중간고사 10/21(수), 프로젝트발표 12/7(월), 기말고사 12/14(월)"
+    overview: >
+      블록체인이 등장한지 20여년 지난 현재, 암호화폐뿐 아니라 다양한 데이터의
+      저장 수단으로 사용되고 있다. 또한 세계 각국에서 스테이블 코인의 핵심
+      기술로써 블록체인이 널리 활용되고 있다. 본 수업에서는 블록체인의 기반이
+      되는 보안 기술, 블록체인의 동작 원리, 사용 예를 학습하고, 스마트컨트랙트와
+      탈중앙화애플리케이션을 이해하며, 블록체인 기반 애플리케이션을 만들어보는
+      것을 목표로 한다.
+    objectives: >
+      블록체인의 기반이 되는 보안 기술을 이해한다(해시함수, 디지털서명 등).
+      블록체인의 동작 원리를 이해하고, 여기에 적용된 많이 쓰이는 합의알고리즘들을
+      학습한다. 스마트컨트랙트와 탈중앙화애플리케이션을 이해하고, 이더리움 또는
+      하이퍼레저 기반의 애플리케이션을 만들어본다.
+    grading:
+      - {type: "중간고사", weight: 35}
+      - {type: "기말고사", weight: 35}
+      - {type: "중간발표", weight: 10}
+      - {type: "최종발표", weight: 20}
+    weekly_plan:
+      - {week: 1, theme: "강의 소개 / 기초 보안기술"}
+      - {week: 2, theme: "블록체인 소개"}
+      - {week: 3, theme: "비트코인 / 전자지갑"}
+      - {week: 4, theme: "합의 알고리즘 (PoW / PoS)"}
+      - {week: 5, theme: "합의 알고리즘 (DPoS / PoA)"}
+      - {week: 6, theme: "블록체인의 활용"}
+      - {week: 7, theme: "프로젝트 주제 발표 / 이더리움"}
+      - {week: 8, theme: "중간고사 / Geth 사용법"}
+      - {week: 9, theme: "스마트컨트랙트 / 탈중앙화 애플리케이션"}
+      - {week: 10, theme: "블록체인 애플리케이션"}
+      - {week: 11, theme: "DID (Decentralized Identifier)"}
+      - {week: 12, theme: "Stable Coin"}
+      - {week: 13, theme: "영지식증명 / zk-SNARKs"}
+      - {week: 14, theme: "Post-Quantum Blockchain / 프로젝트 발표"}
+      - {week: 15, theme: "블록체인의 미래 / 기말고사"}
+    source_pdf: ["블록체인 수업.pdf"]
+
+  - course_code: "21000555"
+    class_no: ["1"]
+    course_name: "소프트웨어공학"
+    professor: "김유경"
+    professor_email: "ykim.be@sookmyung.ac.kr"
+    department: "소프트웨어학부"
+    credits: 3
+    method: "대면"
+    teaching_methods: ["질의응답", "유인물", "컴퓨터보조학습", "OHP", "AI활용"]
+    prerequisites: "객체지향 프로그래밍 (Java 또는 C++ 경험)"
+    textbook: "스노우보드를 통해 배포되는 강의자료"
+    reference: "R. Pressman & B. Maxim, Software Engineering: A Practitioner's Approach, 9th ed. (McGraw-Hill, 2020); 최은만, 『소프트웨어공학의 모든것』 개정판, 생능출판, 2025"
+    exam_schedule: "중간고사 8주차 (10/21 수), 기말고사 15주차 (12/9 수)"
+    overview: >
+      본 교과목은 대규모 소프트웨어 개발의 전 과정을 체계적으로 이해하고,
+      효율적이고 신뢰성 있는 소프트웨어를 개발하기 위한 소프트웨어공학의 기본
+      원리와 실무 기법을 학습하는 것을 목표로 한다. 요구사항 분석, 시스템 설계,
+      구현, 테스트, 유지보수 및 프로젝트 관리 등 소프트웨어 생명주기의 각 단계를
+      다루며, 객체지향 분석 및 설계, UML, 소프트웨어 아키텍처, 애자일
+      개발방법론, 형상관리, 품질보증 등의 핵심 내용을 학습한다. 다양한 사례와
+      팀 프로젝트를 통해 실무 중심의 문제 해결 능력과 협업 능력을 배양한다.
+    objectives: >
+      1. 소프트웨어공학의 기본 개념과 개발 생명주기를 이해하고, 소프트웨어 개발
+      프로세스와 공학적 개발 방법을 설명할 수 있다. 2. 요구사항 분석 및 객체지향
+      설계 능력을 배양하고 UML을 활용하여 시스템을 모델링할 수 있다. 3. 소프트웨어
+      구현 및 품질 확보 기법을 습득하여 테스트·디버깅·리팩토링 및 형상 관리
+      기법을 적용해 품질을 향상시킬 수 있다. 4. 애자일 개발방법론과 프로젝트 관리
+      기법을 이해하고 팀 프로젝트를 수행해 소프트웨어 프로젝트 관리 및 협업 능력을
+      함양한다. 5. DevOps, CI/CD, 생성형 AI 기반 개발도구(GitHub Copilot, ChatGPT
+      등) 등 최신 소프트웨어개발 기술의 활용 방법을 이해하고 적용할 수 있다.
+    grading:
+      - {type: "과제1", weight: 10}
+      - {type: "과제2", weight: 15}
+      - {type: "과제3", weight: 15}
+      - {type: "중간고사", weight: 30}
+      - {type: "기말고사", weight: 30}
+    weekly_plan:
+      - {week: 1, theme: "강의 소개, 프로젝트 내용 및 팀구성 안내 / SE 개요 — 소프트웨어개발 환경의 변화"}
+      - {week: 2, theme: "소프트웨어개발 프로세스와 방법론 (전통적 프로세스, 애자일: 스크럼·Sprint·Product Backlog, 카오스 엔지니어링과 DevOps)"}
+      - {week: 3, theme: "스크럼 시뮬레이션 실습 / 프로젝트 관리 (일정 관리, 개발 비용 추정)"}
+      - {week: 4, theme: "소프트웨어 요구 분석 (1) — 요구사항의 수집과 구조화"}
+      - {week: 5, theme: "소프트웨어 요구분석 (2) — 유스케이스를 이용한 요구 모델링"}
+      - {week: 6, theme: "객체지향방법론 (1) — 정적모델링/동적모델링"}
+      - {week: 7, theme: "객체지향방법론 (2) — 제어모델링과 모델검증"}
+      - {week: 8, theme: "중간고사"}
+      - {week: 9, theme: "소프트웨어 설계원리 — 전통적 설계원리, 객체지향 설계원리 SOLID"}
+      - {week: 10, theme: "소프트웨어 아키텍처와 설계패턴 — 아키텍처 스타일, 설계 패턴"}
+      - {week: 11, theme: "코딩과 리팩토링 — 코딩 표준(MISRA, 시큐어코딩), 코드 품질 개선 기법, 리팩토링"}
+      - {week: 12, theme: "소프트웨어 테스트 — 화이트박스 테스트, 블랙박스 테스트"}
+      - {week: 13, theme: "소프트웨어 유지보수 — 유지보수와 형상관리: Git, Git Flow, CI/CD 개념"}
+      - {week: 14, theme: "소프트웨어 품질 — 코드 품질, ISO25010, SonarQube 소개"}
+      - {week: 15, theme: "기말고사"}
+    source_pdf: ["소웨공.pdf"]
+
+  - course_code: "21003917"
+    class_no: ["1"]
+    course_name: "소프트웨어의이해"
+    professor: "유석종"
+    professor_email: "sjyu@sookmyung.ac.kr"
+    department: "소프트웨어학부"
+    credits: 3
+    method: "대면"
+    teaching_methods: ["세미나", "실습", "OHP"]
+    prerequisites: ""
+    textbook: "유석종·창병모, 『쉽게 이해되는 파이썬 프로그래밍』, 인피니티 북스, 2022"
+    reference: ""
+    exam_schedule: "중간시험 8주차, 기말시험 15주차"
+    overview: >
+      본 교과목은 컴퓨터과학 전공에서 본격적인 프로그래밍 교과목을 수강하기 전에
+      프로그래밍의 기초 개념과 원리를 그래픽스에 기반한 쉬운 예제를 통하여
+      학습하는 내용으로 구성되어 있다. 문제해결방법, 순서도, 반복문, 그래픽스
+      기초와 응용 등의 주제를 다루며 프로그래밍 개론 교과목의 선수과목으로 수강을
+      권장한다.
+    objectives: >
+      컴퓨터과학 전공에서 요구하는 일반적인 프로그래밍 언어를 본격적으로 다루기
+      이전에 프로그래밍 입문자들의 이해를 돕기 위하여 예제를 기반으로 기초 개념과
+      원리를 학습하는 것을 목표로 한다.
+    grading:
+      - {type: "실습과제", weight: 17}
+      - {type: "중간시험", weight: 39}
+      - {type: "기말시험", weight: 39}
+      - {type: "출석", weight: 5}
+    weekly_plan:
+      - {week: 1, theme: "프로그래밍 시작"}
+      - {week: 2, theme: "변수 및 수식"}
+      - {week: 3, theme: "판단과 선택"}
+      - {week: 4, theme: "반복"}
+      - {week: 5, theme: "터틀 그래픽"}
+      - {week: 6, theme: "리스트와 딕셔너리"}
+      - {week: 7, theme: "함수"}
+      - {week: 8, theme: "중간시험"}
+      - {week: 9, theme: "GUI와 파일처리"}
+      - {week: 10, theme: "오류와 예외처리"}
+      - {week: 11, theme: "객체와 클래스"}
+      - {week: 12, theme: "객체와 클래스"}
+      - {week: 13, theme: "그래픽스 응용"}
+      - {week: 14, theme: "애니메이션과 게임"}
+      - {week: 15, theme: "기말시험"}
+    source_pdf: ["소웨이.pdf"]
+
+  - course_code: "21003187"
+    class_no: ["1"]
+    course_name: "영상정보처리"
+    professor: "정영주"
+    professor_email: "yjeong@sookmyung.ac.kr"
+    department: "소프트웨어학부"
+    credits: 3
+    method: "대면"
+    teaching_methods: ["세미나", "실습", "AI활용"]
+    prerequisites: ""
+    textbook: "Digital Image Processing — Gonzalez"
+    reference: ""
+    exam_schedule: "중간/기말 대신 수업 중 손코딩 시험 3회 (2·4·6주차). 10/19(월) 6시간 집중 프로젝트"
+    overview: >
+      디지털 영상의 이해와 영상처리(계조 변환, 히스토그램 처리, Low Pass/High
+      Pass 필터링, 모폴로지, 기하학적 변환) 이론을 습득하고, 프로그래밍 실습을
+      통한 영상처리 알고리즘 구현, AI 바이브 코딩을 활용한 산업체 데이터 프로젝트를
+      진행한다. 집중학기로 진행하며 절대평가 과목이다.
+    objectives: >
+      디지털 영상처리의 이론 습득 및 파이썬 프로그래밍을 이용한 영상처리
+      알고리즘 구현 능력 함양.
+    grading:
+      - {type: "시험", weight: 60}
+      - {type: "프로젝트", weight: 40}
+    weekly_plan:
+      - {week: 1, theme: "디지털 영상 처리 — Input/Output HW, 영상처리 알고리즘 / 터널 영상 Crack 두께 측정·파노라마 스티칭 프로젝트 (바이브 코딩)"}
+      - {week: 2, theme: "Pixel 단위 영상 처리 (Histogram equalization, Otsu binarization)"}
+      - {week: 3, theme: "Pixel 단위 영상처리 실습 (+CNN 실습)"}
+      - {week: 4, theme: "마스크 기반 영상처리 (Low-pass, High-pass filtering, Morphology)"}
+      - {week: 5, theme: "마스크 기반 영상처리 실습 / 터널 영상 Crack 두께 측정 프로젝트"}
+      - {week: 6, theme: "기하학적 변환 영상처리"}
+      - {week: 7, theme: "기하학적 변환 영상처리 실습 / 파노라마 스티칭 영상 생성 프로젝트"}
+      - {week: 8, theme: "Hough Transform"}
+    source_pdf: ["영상정보처리.pdf"]
+
+  - course_code: "21000557"
+    class_no: ["1"]
+    course_name: "자바프로그래밍"
+    professor: "박숙영"
+    professor_email: "blue@sookmyung.ac.kr"
+    department: "소프트웨어학부"
+    credits: 3
+    method: "대면"
+    teaching_methods: ["질의응답", "문제풀이", "실습", "OHP"]
+    prerequisites: "프로그래밍 개론(C언어) 또는 소프트웨어의이해(파이썬)"
+    textbook: "추후 안내 예정"
+    reference: "천인국, 『Power Java』 3판, Infinity Books; 황기태·김효수, 『명품 JAVA Programming』, 생능출판"
+    exam_schedule: "중간고사 8주차, 기말고사 15주차"
+    overview: >
+      응용 소프트웨어 개발에 적합한 언어 및 개발 환경의 습득과 소프트웨어 개발
+      훈련을 목표로 한다. 강의와 실습을 통하여 Java 프로그래밍의 이해, 객체지향
+      프로그래밍 능력 배양, 프로그램 설계 능력 배양, 문제 해결 능력을 배양하는
+      것을 목표로 한다.
+    objectives: >
+      Java 언어를 중심으로 객체지향 프로그래밍 능력 및 프로그램 설계 능력을
+      배양한다. 세부 목표: 객체지향의 개념을 이해하고 자바 클래스의 기본 내용을
+      학습하며 클래스를 설계하고 활용할 수 있다. 자바의 상속과 인터페이스를
+      이해하고 코드 재사용성을 향상시킬 수 있다. 스레드의 개념을 이해하고 다중
+      스레드를 활용할 수 있다. AWT와 SWING을 학습하고 GUI 이벤트 처리과정을
+      이해하여 GUI 프로그래밍을 할 수 있다. 함수형 프로그래밍을 구현할 수 있다.
+    grading:
+      - {type: "실습 과제1", weight: 15}
+      - {type: "실습 과제2", weight: 15}
+      - {type: "중간고사", weight: 30}
+      - {type: "기말고사", weight: 30}
+      - {type: "출석", weight: 10}
+    weekly_plan:
+      - {week: 1, theme: "안전교육 / 강의 소개 / ch1 자바 시작 / ch2 자바 프로그래밍 기초 (식별자, 데이터 타입, 연산자, 조건문) / Lab1 자바 기초 실습"}
+      - {week: 2, theme: "ch3 조건문·반복문·배열 / Lab2 조건문·반복문·배열 실습"}
+      - {week: 3, theme: "ch4 클래스와 객체 1 / Lab3 클래스와 객체 1 실습"}
+      - {week: 4, theme: "ch5 클래스와 객체 2 / Lab4 클래스와 객체 2 실습"}
+      - {week: 5, theme: "ch6 상속 / Lab5 상속 실습"}
+      - {week: 6, theme: "ch7 추상 클래스, 인터페이스, 중첩클래스 / Lab6 추상 클래스와 인터페이스 실습"}
+      - {week: 7, theme: "ch8 자바 API 패키지, 예외 처리, 모듈 / Lab7 패키지와 예외처리 실습"}
+      - {week: 8, theme: "중간고사"}
+      - {week: 9, theme: "ch9 자바 GUI 기초 / ch10 GUI 이벤트 처리 / Lab8 GUI 레이아웃 및 이벤트 처리 실습"}
+      - {week: 10, theme: "ch11 스윙 컴포넌트 / Lab9 스윙 컴포넌트 활용 실습"}
+      - {week: 11, theme: "ch12 자바 그래픽 / Lab10 자바 그래픽 활용 실습"}
+      - {week: 12, theme: "ch13 제너릭과 컬렉션 / Lab11 제너릭과 컬렉션 실습"}
+      - {week: 13, theme: "ch14 함수형 프로그래밍, 람다식 / Lab12 함수형 프로그래밍 실습"}
+      - {week: 14, theme: "ch15 파일 입출력 / ch16 멀티 스레드 / Lab13 파일 입출력 및 멀티 스레드 실습"}
+      - {week: 15, theme: "기말고사"}
+    source_pdf: ["자바프로그래밍.pdf"]
+
+  - course_code: "21105589"
+    class_no: ["1"]
+    course_name: "인공지능산업체특강(캡스톤디자인)"
+    professor: "신승준"
+    professor_email: "seungjun@sookmyung.ac.kr"
+    department: "소프트웨어학부"
+    credits: 3
+    method: "대면"
+    teaching_methods: ["발표", "문제풀이", "실습", "컴퓨터보조학습"]
+    prerequisites: ""
+    textbook: "스노우보드에 주차별 강의안 업로드 예정"
+    reference: "임순범·이상환, 『인공지능 시대의 IT기술의 이해』, 생능출판사"
+    exam_schedule: "중간평가(필기) 8주차, 기말평가(팀프로젝트 최종 발표) 15주차"
+    overview: >
+      인공지능(AI) 및 기계학습(ML) 기술의 실무 활용 능력을 함양하기 위해 클라우드
+      환경에서의 데이터 분석과 AI모델을 학습한다. 최신 클라우드 플랫폼과 도구를
+      이용한 실습과 프로젝트를 수행하며, 기업 실무 엔지니어·산업체 전문가와 함께
+      프로젝트 기획·설계·수행 및 구현의 모든 단계에서 집중 멘토링을 제공한다.
+      Azure 클라우드 실습과 연계되며, 이 수업을 이수한 학생을 대상으로 여름방학에
+      국제 공인 인증 시험인 AI900 자격증 과정을 진행할 예정이다.
+    objectives: >
+      1. 기초 역량 습득: MS Azure를 활용하여 클라우드 플랫폼 및 실무에서 많이
+      사용되는 주요 머신러닝 모델을 학습. 2. 프로젝트 기획 및 설계: 기업의 실전
+      문제와 해결 사례 학습, 프로젝트 주제 선정 및 활용할 AI리소스를 정의.
+      3. 프로젝트 수행 및 멘토링: 실무 엔지니어와 함께 연계 기업의 문제를 해결하는
+      프로젝트를 구현하며 산업체 전문가의 집중 멘토링을 받음. 4. 결과 발표 및
+      평가: 팀 프로젝트 결과물을 발표하고 산업체 전문가로부터 기술 동향 연계
+      피드백을 받음. 5. 교내 SW중심대학사업단과 협력하여 대내외 경진대회에 참여.
+    grading:
+      - {type: "캡스톤디자인 과정평가", weight: 15}
+      - {type: "프로젝트 수행계획서 및 결과보고서", weight: 30}
+      - {type: "중간평가", weight: 20}
+      - {type: "기말평가", weight: 20}
+      - {type: "출석", weight: 15}
+    weekly_plan:
+      - {week: 1, theme: "Cloud & Azure cloud 소개 (Cloud Computing, MS Azure Resource Group·ML Studio 리소스 생성)"}
+      - {week: 2, theme: "Azure ML Designer 분류 모델 (Classification, Random Forest, NASA 데이터 로켓 발사 예측)"}
+      - {week: 3, theme: "Azure ML Designer 회귀 모델 (Regression, Linear/Multiple Linear Regression, 자전거 수요 예측)"}
+      - {week: 4, theme: "Azure ML Designer 군집 모델 (Clustering, K-means, KBO 데이터 최고타자 예측)"}
+      - {week: 5, theme: "Pytorch 전이학습 (Perceptron, MLP, CNN, ResNet50, 이미지 분류 CNN 모델)"}
+      - {week: 6, theme: "Cloud and Data Science Industry Trend 특강 (Early in Career, 멀티 클라우드 아키텍처와 외국계 취업 가이드)"}
+      - {week: 7, theme: "Azure Custom Vision 이미지 AI 모델 (개체 감지, 이미지 분류)"}
+      - {week: 8, theme: "중간고사"}
+      - {week: 9, theme: "Microsoft Azure OpenAI (1) — OpenAI 및 알고리즘 기초, 자연어 처리 기초, Azure OpenAI 챗봇 구현"}
+      - {week: 10, theme: "Microsoft Azure OpenAI (2) — Azure OpenAI RAG 모델 구현 (1)"}
+      - {week: 11, theme: "Microsoft Azure OpenAI (3) — Azure OpenAI RAG 모델 구현 (2)"}
+      - {week: 12, theme: "Team Project (1) — Azure 내 AI Resource 활용 팀 프로젝트 및 멘토링"}
+      - {week: 13, theme: "Team Project (2)"}
+      - {week: 14, theme: "Team Project (3)"}
+      - {week: 15, theme: "기말평가 (팀프로젝트 발표)"}
+    source_pdf: ["인산특.pdf"]
+
+  - course_code: "21003761"
+    class_no: ["1"]
+    course_name: "컴퓨터특강"
+    professor: "김윤진"
+    professor_email: "ykim@sookmyung.ac.kr"
+    department: "소프트웨어학부"
+    credits: 3
+    method: "대면"
+    teaching_methods: ["발표"]
+    prerequisites: ""
+    textbook: "Lecture note (PPT slides) — 김윤진 교수"
+    reference: ""
+    exam_schedule: "Midterm Exam 8주차, Final Exam 15주차"
+    overview: >
+      This course covers methodologies for logical thinking and efficient
+      expression based on valuable basis in the field of computer science. Major
+      issues covered in this course include logic for learning, teaching, test
+      and evaluation, creation and presentation. (컴퓨터과학 분야에서의 학습·교육·
+      평가·창작·발표를 위한 논리와 효율적 표현 방법론을 다룬다.)
+    objectives: >
+      This course provides the most important insights into how to learn, teach,
+      test, create and present in the field of computer science.
+    grading:
+      - {type: "Midterm Exam", weight: 50}
+      - {type: "Final Exam", weight: 50}
+    weekly_plan:
+      - {week: 1, theme: "Introduction to this Course"}
+      - {week: 2, theme: "Introduction to Logic for Learning in the field of CS"}
+      - {week: 3, theme: "Introduction to Logic for Teaching in the field of CS"}
+      - {week: 4, theme: "Introduction to Logic for Test & Evaluation in the field of CS"}
+      - {week: 5, theme: "Introduction to Logic for Creation in the field of CS"}
+      - {week: 6, theme: "Introduction to Logic for Presentation in the field of CS"}
+      - {week: 7, theme: "Midterm-exam Q&A"}
+      - {week: 8, theme: "Midterm Exam"}
+      - {week: 9, theme: "Advanced Topics of Logic for Learning in the field of CS"}
+      - {week: 10, theme: "Advanced Topics of Logic for Teaching in the field of CS"}
+      - {week: 11, theme: "Advanced Topics of Logic for Test & Evaluation in the field of CS"}
+      - {week: 12, theme: "Advanced Topics of Logic for Creation in the field of CS"}
+      - {week: 13, theme: "Advanced Topics of Logic for Presentation in the field of CS"}
+      - {week: 14, theme: "Final exam Q&A"}
+      - {week: 15, theme: "Final Exam"}
+    source_pdf: ["컴특.pdf"]
