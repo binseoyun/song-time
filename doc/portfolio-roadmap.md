@@ -47,6 +47,7 @@
   - [ ] 최종 개선안 선택 + ADR 작성
 - [x] Phase 3. K8s 운영화 (일부, 당겨서 진행) — Ingress 도입 + frontend same-origin 전환: K8s 배포 후 브라우저에서 로그인 검증 자체가 불가능했던 문제(클러스터 내부 DNS를 브라우저가 해석 못함) 해결. LoadBalancer×2 → Ingress 1개로 진입점 통합, docker-compose에도 nginx 리버스 프록시로 동일 구조 적용 ([ADR-003](ADR/ADR-003-Ingress-도입과-Frontend-API-주소-구성-방식-전환.md), 2026-08-04)
 - [ ] Phase 3. 나머지 (Probe 재설계, resource requests/limits + CronHPA 사전 확장·HPA 병행([ADR-011](ADR/ADR-011-CronHPA-HPA-병행-확장-구조.md)), DB 마이그레이션 도구 도입) — resource/HPA는 이미 실험 01(Group A/B/C) 실측 데이터가 있어 실시간 수강신청 Stage 3의 Sentinel/풀 사이징보다 우선순위 높음(2026-08-19 결정)
+  - [ ] **엣지 coarse rate limit** (AWS/K8s 실배포 시) — Ingress에 IP/커넥션 단위 요청 수 제한(nginx-ingress `limit-rps`/`limit-connections` 어노테이션 또는 AWS WAF rate-based rule). DoS·봇 방어용이며, 애플리케이션 비용 방어(챗봇 LLM 토큰 = ai-server 계층, ADR-010 §15 재검토, #108)와는 별도 계층(defense in depth). 전용 게이트웨이 제품(Kong/Apigee)은 이 규모에 불필요 — 서비스 소수·프론트 클라이언트 1개라, "규모에 안 맞는 복잡도는 안 들인다" 원칙(ADR-009 등) 적용. 설정 한 줄 수준이라 별도 프로젝트로 잡지 않고 실배포 체크리스트 항목으로 둔다.
 - [ ] Phase 4. CI/CD
 - [ ] Phase 5. 관측성
 
