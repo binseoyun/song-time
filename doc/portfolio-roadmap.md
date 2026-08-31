@@ -28,7 +28,10 @@
 
   - **Stage 3-1(프롬프트/Tool 고도화) 완료(2026-08-27, 이슈 #82)**: `search_courses` professor 매칭 + 노이즈 토큰 흡수, 시스템 프롬프트 거절 범위 명시. 답변 포함 검사 77.8→100%, 회귀 없음. → [실험 03 프롬프트개선](experiment/03-프롬프트개선-before-after.md).
   - **Stage 3-1b(좌석 데이터 소스 단일화) 완료(2026-08-27, 이슈 #86, [ADR-013](ADR/ADR-013-좌석-데이터-소스-단일화.md))**: 챗봇 "잔여석"이 `capacity - enrolled`(관심과목 하트 수 기반, 실시간 수강신청과 무관)였던 버그. `/api/courses`가 Redis 실시간 좌석 + `course_interests` 수를 응답에 싣고, 챗봇이 실시간 잔여석/신청자 수/관심 등록 수 3개를 분리해 답하도록 수정. → [실험 03 §8](experiment/03-프롬프트개선-before-after.md).
-  - 다음은 Stage 3-3(가드레일 전/후 최종 측정).
+  - **Stage 3-2(장애 폴백) 완료(2026-08-31, 이슈 #106)**: `chat/errors.py` LLM 장애 3분류, Tool/임베딩/Qdrant 장애 친절 degrade, 실패 시에도 사용자 메시지 저장. 수동 장애 주입 3종 검증. → [리팩토링 03](refactoring/03-챗봇-장애-폴백.md).
+  - **Stage 3-0(사용자 단위 rate limit) 완료(2026-08-31, 이슈 #108)**: ADR-010 §15 재검토 — Node → `ai-server` 계층. `chat/rate_limit.py` `redis-chat` 카운터 + `INCR`/`EXPIRE` Lua 원자화, Redis 장애 fail-open.
+  - **Stage 3-3(가드레일 전/후 최종 종합 측정) 완료(2026-08-31, 이슈 #113)**: 벤치마크 재작성(#111) 후 74문항×5회. 가드레일만으로는 Tool 선택 93.1→93.5%(제자리)지만 **실패 성격이 뒤바뀜** — baseline 과잉호출 41.7→0%, 대신 RAG 결합이 "개념어 과목검색→`search_syllabus` 오라우팅"(과목검색 100→66.7%)을 만듦. **`search_courses`·`search_syllabus` description 2곳만 교정**(프롬프트 무변경) → Tool 선택 **100%**(sd 0.0, 72/72), 회귀 0, 할루시네이션 0/17. latency invoke p50 4.9→1.9초, 비용 $3.26→$1.00/1000turn. → [실험 05](experiment/05-가드레일-전후-최종-측정.md), Notion 보고서 08.
+  - 다음은 Stage 3-4(옛 `/recommend` 제거).
   - **Stage 3-1(프롬프트/Tool 고도화) 완료(2026-08-27, 이슈 #82)**: `search_courses` professor 매칭 + 노이즈 토큰 흡수, 시스템 프롬프트에 거절 정책. 답변 포함 검사 77.8→100%, 회귀 없음.
   - **Stage 1-1(강의계획서 청킹 규칙 확정) 완료(2026-08-27, 이슈 #87)**: 강의계획서 19개 전수 정독 → 과목당 1청크(본문 해시로 분반 병합/분리, 19파일→17청크), 구조화 필드는 벡터 DB 페이로드(별도 SQL 테이블 없음), RAG Tool 2개(`search_syllabus`/`get_syllabus`). ADR-010 §13/§8 확정 + eval 라벨. 설계: Notion "AI 챗봇 RAG 결합 (Stage 1)".
   - **벡터 DB 재선정(2026-08-27, 이슈 #91)**: Chroma → **Qdrant**. K8s + AWS/GCP 실배포·운영이 로드맵에 확정돼 ADR-010 §4 재검토 조건 충족. Qdrant는 공식 Helm·클라우드 관리형·로컬↔클라우드 API 연속성. RAG 코드 착수 전이라 전환 비용 ≈ 0. ADR-010 §4/§5/부록 A 갱신.
