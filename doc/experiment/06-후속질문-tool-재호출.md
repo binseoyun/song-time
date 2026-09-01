@@ -2,7 +2,7 @@
 
 - 이슈: #117
 - 관련: ADR-010 §8/§13/§14, `doc/AI-에이전트-구현계획.md` (Stage 3 이후 실사용 버그 트랙)
-- 상태: **Before 측정 완료. 수정·After 미완.**
+- 상태: **완료.** 재현 케이스 추가 → Before → 수정(A) → After.
 - 선례: Stage 3-1b(#93) — "실사용 → 버그 → Tool/프롬프트 보강 + 벤치마크 강화" 루프
 
 ---
@@ -113,16 +113,57 @@ hit@3 100%로 불변.
 
 ---
 
-## 5. 다음 (수정 → After)
+## 5. 수정 (A) — 시스템 프롬프트
 
-- 후보 A: 시스템 프롬프트에 "교수 이메일·연구실·선수과목 등 강의계획서에만 있는 값은
-  히스토리에 답이 안 보이면 `get_syllabus`를 다시 호출한다" 한 문장. flash-lite 과적합
-  위험(#113 교훈) 때문에 최소 문구.
-- 후보 B: `get_course_by_code`/`search_courses` 응답에 `professor_email`을 얹어 후속
-  이메일 질문이 라이브 데이터 경로로도 답 가능하게. (단 이메일은 Class 데이터에 없음 →
-  스키마 확장 필요, 범위 큼)
-- 후보 C: `search_syllabus`/`get_syllabus` description에 "교수 이메일·연구실 문의처는
-  이 Tool로 답한다" 명시.
+`chat/agent.py` `SYSTEM_PROMPT`, 2군데:
 
-수정 후 `rag-54`/`rag-55` + `rag_questions.yaml` 전체 agent 모드 재측정, 회귀 0 확인,
-이 문서 §4에 After 추가.
+1. "강의계획서 내용(…·주교재·선수과목)" 목록에 **"·담당교수 이메일·연구실"** 추가.
+   교수 이메일이 원래 이 목록에 없어서 모델이 "강의계획서 값 = Tool 전용"으로 안 봤다.
+2. 한 문장 추가: **"앞선 대화에서 이미 조회했더라도 그 값이 지금 대화 내용에 그대로
+   보이지 않으면 get_syllabus를 다시 호출해 확인하고, 기억에 의존해 답하지 않는다."**
+
+후보 B(과목 API에 `professor_email` 얹기)는 Class 스키마 확장이 필요해 범위가 크고,
+C(Tool description 수정)는 A와 겹쳐서 A만 적용. flash-lite 과적합 위험(#113) 때문에
+프롬프트 다른 부분은 안 건드렸다.
+
+---
+
+## 6. After (2026-09-01, `gemini-3.1-flash-lite`)
+
+원본: `doc/experiment/raw/04-rag-eval-agent-117-after-A-20260901.jsonl` (재현 5 reps),
+`...-after-A-full-20260901-summary.json` (전체 3 reps),
+`...-baseline-nofix-20260901-summary.json` (수정 없이 같은 환경 3 reps).
+
+### 재현 시나리오 (5 reps)
+
+| 시나리오 | Before | After (A) |
+|---|---|---|
+| `rag-54` | **0/3** (`jhshim@university.ac.kr`) | **5/5** ✅ (`get_syllabus` 재호출 → `jshim@sookmyung.ac.kr`) |
+| `rag-55` | 3/3 | 5/5 |
+| **`후속` pass** | **50%** | **100%** |
+
+### 전체 `rag_questions.yaml` (56 시나리오, agent, 3 reps) — 수정 전/후 동일 환경 비교
+
+| 카테고리 | Before (수정 없음) | After (A) |
+|---|---|---|
+| overall | 91.1% | 95.8% |
+| hit (의미검색) | 91.4% | 94.3% |
+| not_registered (미등록) | 85.7% | 95.2% |
+| **out_of_scope (범위밖)** | **100%** | **100%** |
+| **routing (라우팅)** | **100%** | **100%** |
+| **syllabus_followup (후속)** | **50%** | **100%** |
+
+**회귀 판정: 없음.**
+- 라우팅 오선택에 민감한 두 카테고리(`out_of_scope`·`routing`)는 양쪽 다 결정적 100%.
+- `hit`/`not_registered`의 rep별 흔들림은 **`search_syllabus`가 에러를 반환한 케이스**
+  (Stage 3-2 degrade 문구 "강의계획서 검색 기능을 사용할 수 없어…", `retrieved: []`).
+  Qdrant / `gemini-embedding-001` API의 일시적 실패다 — **양쪽 실행 모두 p95 latency
+  ≈ 18초**, flaky 시나리오 목록도 실행마다 바뀜(Before: rag-03/10/12/13/22/23/24/33/34,
+  After: rag-11/21/23/32/34/41 — 겹침 2개). 수정과 무관한 환경 노이즈다.
+- flaky 재확인: 위 flaky 13개를 `--sleep 4`로 재측정 → 11/13 전 rep 통과, 남은 2개
+  (rag-10/11)도 실패 원인이 전부 `search_syllabus` 에러였다.
+
+### 비용
+
+`SYSTEM_PROMPT` +약 90자 → input 토큰 turn당 소폭 증가(무시 가능). latency invoke
+구간은 불변(에러 케이스 제외 p50 ≈ 2.4초).
