@@ -42,15 +42,18 @@
   - **Stage 1-3(RAG Tool 결합) 완료(2026-08-31, 이슈 #102)**: `chat/syllabus_tools.py` — `search_syllabus`(top-3, threshold 없음)·`get_syllabus`(course_code 필터, 다중청크 되물음, 미등록 None). TOOLS 2→4, SYSTEM_PROMPT +2문장(A안). 스모크 9케이스 라우팅 100%.
   - **Stage 1-4(RAG hit rate + naive Before/After) 완료(2026-08-31, 이슈 #104)**: `eval/run_rag_eval.py` 3모드. retrieval hit@3 **100%**, agent 전체 pass **100%**(162 rows, 미등록 할루시네이션 0·범위밖 오호출 0·1-3 회귀 0), naive(Before)도 의미검색 100%. **18청크 규모에선 RAG 정확도 우위 없음** — 실질 이득은 토큰 2.2×↓ + 확장성 + §7 아키텍처 분리. threshold 점수 겹쳐 보류. → [실험 04](experiment/04-결과.md).
   - **AI 에이전트 챗봇 트랙 완료 (2026-09-01, 이슈 #119)**: Stage 0~3 + 실사용 버그 2건(#93/#117) 전부 마무리. 개발 전체 회고(문제→해결 상세→Before/After→방법론→한계) → [portfolio/03-ai-챗봇-rag-function-calling.md](portfolio/03-ai-챗봇-rag-function-calling.md), ADR-010 §18 "결과" 섹션 추가. **핵심 수치**: Tool 라우팅 93.1→100%, 범위밖 과잉호출 42→0%, RAG hit@3 100%·미등록 할루시네이션 0%, latency invoke p50 4.9→1.9초, 비용 $3.26→$1.00/1000turn, 옛 `/recommend` 완전 제거.
-- [x] Phase 2. 동시성 개선 (진행 중) — 기존 `courseController.js`의 정원 초과 방지 로직 부재 문제(로드맵 P1)를 다룬다. 위 실시간 수강신청 신규 기능과는 별개 트랙.
+- [x] **Phase 2. 동시성 개선 (완료, 2026-09-01 — [ADR-014](ADR/ADR-014-실시간-수강신청-동시성-제어-방식-확정.md))** — 로드맵 P1(`courseController.js` 정원 초과 방지 부재)과 실시간 수강신청의 동시성 제어를 함께 다룸. naive(Group A)로 "깨짐" 증명 → A/B/C 실험 → Group C 확정.
   - [x] Group A(무방비)/B(비관적 락) API 구현 (#9, 2026-08-10)
   - [x] k6+Prometheus+Grafana 부하테스트 인프라 + 계정 시딩 스크립트 (#13, 2026-08-11)
   - [x] 실험 01 정식 실행: 7단계 동시성 스윕(50~12,000명) × 그룹 × 5회 반복, 총 70회차 (#15, 2026-08-12) — [결과](experiment/01-결과.md). H1(A는 정합성 깨짐, 저동시성에선 고처리량이나 3,000명↑부터 A도 붕괴) 부분 확인, H2(B는 정합성 완벽하나 특정 수준부터 처리량 급락) 확인. Group A가 "정원 검사 로직이 있는데도" TOCTOU 레이스로 무력화되는 메커니즘 규명.
   - [x] Group C(Redis 원자 연산) 구현 및 동일 스윕 재실험 — Group B와 비교 (#23/#29, 2026-08-18) — [결과](experiment/01-결과-groupC.md). 정합성 스윕 35/35 회차 전부 오버셀 0건·DLQ 0건(H3 정합성 확인, success sd 항상 0.0). 처리량은 12,000명에서 handled_rate 12.1%(A 8.1%/B 9.1%보다 근소 우위)로, "3,000명↑ 붕괴는 락 경합이 아니라 인프라 한계"라는 A/B 관찰이 Group C에서도 재확인됨. 어뷰징(매크로 연타/시간표 겹침)은 로컬 커넥션 한계로 노이즈가 컸으나 판정 기준(정원 초과 성공·겹침 유저) 위반은 0건
   - [x] 3,000명↑ 구간 붕괴 원인 분리 — **로컬 단일 호스트 backend 프로세스 CPU 천장으로 이미 특정([ADR-007](ADR/ADR-007-대기열-부하-backend-인스턴스-수평-확장.md), [트러블슈팅 08](troubleshooting/08-validate3k-잔여노이즈-원인-docker-desktop-cpu-캡.md)). 로컬에서 커넥션 한도 스윕은 "노트북 측정"이라 무의미 — 실배포 규모 처리량 상한 측정은 인프라 트랙 순서 ④(AWS 부하테스트)로 이관.**
   - [x] 최종 개선안 선택 + ADR 작성 — **Group C 확정, [ADR-014](ADR/ADR-014-실시간-수강신청-동시성-제어-방식-확정.md) (2026-09-01, #123). ADR-006 §2.1/§2.2 결정을 독립 ADR로 분리 + 실험 01 수치(오버셀 A +925 / B·C 0·105회차 sd 0.0, 카오스 3종) 편입. Phase 2 종결.**
-- [x] Phase 3. K8s 운영화 (일부, 당겨서 진행) — Ingress 도입 + frontend same-origin 전환: K8s 배포 후 브라우저에서 로그인 검증 자체가 불가능했던 문제(클러스터 내부 DNS를 브라우저가 해석 못함) 해결. LoadBalancer×2 → Ingress 1개로 진입점 통합, docker-compose에도 nginx 리버스 프록시로 동일 구조 적용 ([ADR-003](ADR/ADR-003-Ingress-도입과-Frontend-API-주소-구성-방식-전환.md), 2026-08-04)
-### 인프라 트랙 실행 순서 (2026-09-01 확정, 이슈 #123 / #121 아키텍처 검토 반영)
+- [x] Phase 3. K8s 운영화 — 일부 당겨서 완료: Ingress 도입 + frontend same-origin 전환. K8s 배포 후 브라우저에서 로그인 검증이 불가능했던 문제(클러스터 내부 DNS를 브라우저가 해석 못함) 해결. LoadBalancer×2 → Ingress 1개, docker-compose에도 nginx 리버스 프록시로 동일 구조 ([ADR-003](ADR/ADR-003-Ingress-도입과-Frontend-API-주소-구성-방식-전환.md), 2026-08-04). 나머지는 아래 인프라 트랙 ③.
+
+---
+
+## 인프라 트랙 실행 순서 (2026-09-01 확정, 이슈 #123 / #121 아키텍처 검토 반영)
 
 챗봇 트랙(로드맵 외 작업) 완료 후 마지막 트랙. **모듈러 모놀리스를 먼저 K8s·클라우드·CI/CD로 운영화한 뒤, 그 플랫폼 위에서 수강신청 도메인을 마이크로서비스로 점진 추출**한다(strangler fig). 서비스 분리와 K8s 운영을 동시에 디버깅하지 않기 위한 순서 — 근거: [아키텍처 스타일 검토](architecture/00-아키텍처-스타일-검토.md).
 
