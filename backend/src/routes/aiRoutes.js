@@ -4,9 +4,6 @@ const router=express.Router();
 const aiController = require('../controllers/aiController');
 const authMiddleware = require('./authMiddleware');
 
-// POST http://localhost:8000/api/ai/recommend
-router.post('/recommend', aiController.getRecommendation);
-
 // AI 챗봇 프록시(ADR-010 §3/§11) — 로그인 필수, ai-server로 인증+프록시만 한다.
 router.post('/chat', authMiddleware, aiController.chat);
 router.get('/sessions', authMiddleware, aiController.getSessions);

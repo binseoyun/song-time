@@ -31,7 +31,7 @@
   - **Stage 3-2(장애 폴백) 완료(2026-08-31, 이슈 #106)**: `chat/errors.py` LLM 장애 3분류, Tool/임베딩/Qdrant 장애 친절 degrade, 실패 시에도 사용자 메시지 저장. 수동 장애 주입 3종 검증. → [리팩토링 03](refactoring/03-챗봇-장애-폴백.md).
   - **Stage 3-0(사용자 단위 rate limit) 완료(2026-08-31, 이슈 #108)**: ADR-010 §15 재검토 — Node → `ai-server` 계층. `chat/rate_limit.py` `redis-chat` 카운터 + `INCR`/`EXPIRE` Lua 원자화, Redis 장애 fail-open.
   - **Stage 3-3(가드레일 전/후 최종 종합 측정) 완료(2026-08-31, 이슈 #113)**: 벤치마크 재작성(#111) 후 74문항×5회. 가드레일만으로는 Tool 선택 93.1→93.5%(제자리)지만 **실패 성격이 뒤바뀜** — baseline 과잉호출 41.7→0%, 대신 RAG 결합이 "개념어 과목검색→`search_syllabus` 오라우팅"(과목검색 100→66.7%)을 만듦. **`search_courses`·`search_syllabus` description 2곳만 교정**(프롬프트 무변경) → Tool 선택 **100%**(sd 0.0, 72/72), 회귀 0, 할루시네이션 0/17. latency invoke p50 4.9→1.9초, 비용 $3.26→$1.00/1000turn. → [실험 05](experiment/05-가드레일-전후-최종-측정.md), Notion 보고서 08.
-  - 다음은 Stage 3-4(옛 `/recommend` 제거).
+  - **Stage 3-4(옛 `/recommend` 제거) 완료(2026-09-01, 이슈 #115)**: ADR-010 §17 "완전 대체" 결정 실행. 프론트 `AIRecommendation.tsx` 삭제 + `App.tsx` `'ai'` 페이지 제거(`HomePage` 카드는 "AI 상담 챗봇"으로 교체), Node `POST /api/ai/recommend` 라우트·`getRecommendation` 제거, ai-server `POST /recommend` 엔드포인트 + `/recommend` 전용 전역 Gemini 설정·죽은 import 제거, `K8s/01-configmap.yaml`의 dead "AI 추천 설정"·"직무별 추천" 5키 제거. 검증: 프론트 `vite build`·backend 모듈 로드·`main.py` compile 통과, 잔여 참조 0. → [리팩토링 04](refactoring/04-recommend-제거.md). **남은 것**: ADR-010에 Stage 0~3 종합 "결과" 섹션 추가.
   - **Stage 3-1(프롬프트/Tool 고도화) 완료(2026-08-27, 이슈 #82)**: `search_courses` professor 매칭 + 노이즈 토큰 흡수, 시스템 프롬프트에 거절 정책. 답변 포함 검사 77.8→100%, 회귀 없음.
   - **Stage 1-1(강의계획서 청킹 규칙 확정) 완료(2026-08-27, 이슈 #87)**: 강의계획서 19개 전수 정독 → 과목당 1청크(본문 해시로 분반 병합/분리, 19파일→17청크), 구조화 필드는 벡터 DB 페이로드(별도 SQL 테이블 없음), RAG Tool 2개(`search_syllabus`/`get_syllabus`). ADR-010 §13/§8 확정 + eval 라벨. 설계: Notion "AI 챗봇 RAG 결합 (Stage 1)".
   - **벡터 DB 재선정(2026-08-27, 이슈 #91)**: Chroma → **Qdrant**. K8s + AWS/GCP 실배포·운영이 로드맵에 확정돼 ADR-010 §4 재검토 조건 충족. Qdrant는 공식 Helm·클라우드 관리형·로컬↔클라우드 API 연속성. RAG 코드 착수 전이라 전환 비용 ≈ 0. ADR-010 §4/§5/부록 A 갱신.
@@ -40,7 +40,7 @@
   - **Stage 1-2(강의계획서 → Qdrant 적재) 완료(2026-08-30, 이슈 #100)**: PDF 19개 전수 정독 → `syllabi.yaml`(18청크, A3 single source of truth). `backend/ai-server/rag/` 파이프라인(`validate_syllabi`/`ingest --dry-run`/`inspect_qdrant`), `gemini-embedding-001` 비대칭 임베딩(3072d), `docker-compose`에 `qdrant` 추가. 스팟체크 rank-1 정답 5/5. ADR-010 §13에 실행 결과 서브섹션(17→18청크 정정, weekly_plan 8~15주). 설계: Notion "AI 챗봇 RAG 결합 (Stage 1)".
   - **Stage 1-3(RAG Tool 결합) 완료(2026-08-31, 이슈 #102)**: `chat/syllabus_tools.py` — `search_syllabus`(top-3, threshold 없음)·`get_syllabus`(course_code 필터, 다중청크 되물음, 미등록 None). TOOLS 2→4, SYSTEM_PROMPT +2문장(A안). 스모크 9케이스 라우팅 100%.
   - **Stage 1-4(RAG hit rate + naive Before/After) 완료(2026-08-31, 이슈 #104)**: `eval/run_rag_eval.py` 3모드. retrieval hit@3 **100%**, agent 전체 pass **100%**(162 rows, 미등록 할루시네이션 0·범위밖 오호출 0·1-3 회귀 0), naive(Before)도 의미검색 100%. **18청크 규모에선 RAG 정확도 우위 없음** — 실질 이득은 토큰 2.2×↓ + 확장성 + §7 아키텍처 분리. threshold 점수 겹쳐 보류. → [실험 04](experiment/04-결과.md).
-  - 다음: Stage 3-2(장애 폴백) / 3-3(가드레일 전·후 최종 종합 측정 — `questions.yaml` 74문항 재라벨 포함) / 3-4(옛 `/recommend` 제거).
+  - Stage 3-2/3-3/3-4 전부 완료(2026-08-31~09-01). AI 에이전트 트랙에서 남은 것은 ADR-010 Stage 0~3 종합 "결과" 섹션뿐.
 - [x] Phase 2. 동시성 개선 (진행 중) — 기존 `courseController.js`의 정원 초과 방지 로직 부재 문제(로드맵 P1)를 다룬다. 위 실시간 수강신청 신규 기능과는 별개 트랙.
   - [x] Group A(무방비)/B(비관적 락) API 구현 (#9, 2026-08-10)
   - [x] k6+Prometheus+Grafana 부하테스트 인프라 + 계정 시딩 스크립트 (#13, 2026-08-11)

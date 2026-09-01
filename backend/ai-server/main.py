@@ -1,10 +1,7 @@
 # backend/ai-server/main.py
-import json
 import logging
-import os
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 
-import google.generativeai as genai
 import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
@@ -20,15 +17,10 @@ load_dotenv()
 # 챗봇 장애 로깅(Stage 3-2) — raw 예외는 클라이언트로 안 보내고 여기로만 남긴다.
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s [%(name)s] %(message)s")
 
-# 1. Gemini 설정
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
-else:
-    print("[WARN] GEMINI_API_KEY 가 설정되어 있지 않습니다.")
-
-GENAI_MODEL = os.getenv("GENAI_MODEL", "models/gemini-pro-latest")
-model = genai.GenerativeModel(GENAI_MODEL)
+# Gemini 설정은 각 소비자가 자체적으로 한다: 챗봇 에이전트는 langchain_google_genai에
+# google_api_key를 직접 넘기고(chat/agent.py), RAG 임베딩은 rag/embed.py가
+# genai.configure를 자체 호출한다. 옛 /recommend(Stage 3-4에서 제거)만 이 모듈의
+# 전역 genai 설정에 의존했다.
 
 # ------------------------------------------------
 # FastAPI 앱 생성
@@ -47,12 +39,6 @@ app.add_middleware(
 # AI 챗봇 라우트(ADR-010, Stage 0-5) — POST /api/ai/chat, GET /api/ai/sessions,
 # GET /api/ai/sessions/:id/messages
 app.include_router(chat_router)
-
-
-    
-
-
-
 
 
 # 프론트엔드 요청 데이터 구조 정의
@@ -100,62 +86,6 @@ def create_schedule_endpoint(request: ScheduleRequest):
             "PLAN C": plan_c,
         },
     }
-
-
-# ------------------------------------------------
-# AI 수업 추천 API
-# ------------------------------------------------
-class RecommendationRequest(BaseModel):
-    major: Optional[str] = None
-    job_interest: str
-    courses: List[Dict[str, Any]]
-
-
-@app.post("/recommend")
-def recommend_courses(req: RecommendationRequest):
-    try:
-        all_courses = req.courses
-
-        courses_text = "\n".join(
-            [
-                f"- {c['code']} {c['name']} ({c.get('department', '미정')}): "
-                f"{c.get('time', '')} {','.join(c.get('day', []))}"
-                for c in all_courses
-            ]
-        )
-
-        if req.major:
-            student_intro = f"나는 {req.major} 전공 학생이고,"
-        else:
-            student_intro = "나는 컴퓨터 과학과 학생이고,"
-
-        prompt = f"""
-        너는 대학교 수강신청 도우미 AI야.
-        {student_intro} 희망 직무는 '{req.job_interest}'야.
-
-        아래는 우리 학교에 개설된 강의 목록이야:
-        {courses_text}
-
-        이 중에서 내 희망 직무와 가장 관련성이 높고 도움이 될만한 강의 3~4개를 추천해줘.
-
-        [중요] 반드시 아래와 같은 순수한 JSON 형식으로만 답변해. 마크다운(```json)이나 다른 말은 절대 넣지 마.
-        {{
-            "recommended_codes": ["과목코드1", "과목코드2", "과목코드3"]
-        }}
-        """
-
-        response = model.generate_content(prompt)
-        response_text = response.text.replace("```json", "").replace("```", "").strip()
-        result_json = json.loads(response_text)
-
-        recommended_codes = result_json.get("recommended_codes", [])
-        final_recommendations = [c for c in all_courses if c["code"] in recommended_codes]
-
-        return final_recommendations
-
-    except Exception as e:
-        print(f"AI Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":

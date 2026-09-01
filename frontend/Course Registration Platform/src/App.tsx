@@ -3,7 +3,6 @@ import { LoginPage } from './components/LoginPage';
 import { HomePage } from './components/HomePage';
 import { TimetableGenerator } from './components/TimetableGenerator';
 import { CourseList } from './components/CourseList';
-import { AIRecommendation } from './components/AIRecommendation';
 import { AIChat } from './components/AIChat';
 import { RegistrationPractice } from './components/RegistrationPractice';
 import { MyPage } from './components/MyPage';
@@ -57,7 +56,6 @@ export type Page =
   | 'home'
   | 'timetable'
   | 'courses'
-  | 'ai'
   | 'aichat'
   | 'registration'
   | 'mypage';
@@ -538,16 +536,6 @@ export default function App() {
                   수업 목록
                 </button>
                 <button
-                  onClick={() => setCurrentPage('ai')}
-                  className={`px-3 py-2 rounded-md ${
-                    currentPage === 'ai'
-                      ? 'bg-blue-50 text-blue-600'
-                      : 'text-gray-700 hover:bg-gray-50'
-                  }`}
-                >
-                  AI 수업 추천
-                </button>
-                <button
                   onClick={() => setCurrentPage('aichat')}
                   className={`px-3 py-2 rounded-md ${
                     currentPage === 'aichat'
@@ -639,13 +627,6 @@ export default function App() {
             error={coursesError}
             interestedCourses={interestedCourses}
             onToggleInterest={handleToggleInterest}
-          />
-        )}
-        {currentPage === 'ai' && user && (
-          <AIRecommendation
-            user={user}
-            onToggleInterest={handleToggleInterest}
-            interestedCourses={interestedCourses}
           />
         )}
         {currentPage === 'aichat' && user && authToken && (
