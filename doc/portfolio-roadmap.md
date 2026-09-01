@@ -20,7 +20,7 @@
   - 구현 시 별도 "수강신청" 탭을 신설하고, 실제 학교 수강신청 사이트와 동일한 UI/UX를 목표로 한다.
   - 구현 순서 및 Stage별 측정 계획(naive 버전으로 Before 증명 → 개선 → After 재측정 원칙 포함): [실시간-수강신청-구현계획.md](실시간-수강신청-구현계획.md)
   - Stage 3(운영 고도화)는 전부 필수가 아님 — 2026-08-19 재검토로 [필수]/[권장]/[보류]로 재분류함 (구현계획 문서 참고). [보류] 항목은 아래 Phase 3 나머지·AWS/K8s 실배포와 함께 마지막 인프라 트랙에서 처리.
-- [ ] **로드맵 외 작업(진행 중)**: AI 에이전트 챗봇(RAG + Function Calling) — 기존 단발성 추천(`/recommend`)을 강의계획서 기반 근거 응답 + 실제 수강신청 보조까지 가능한 대화형 상담 에이전트로 확장하는 것. 새 기능이므로 위와 같은 원칙으로 **로드맵 외 작업**으로 분류한다.
+- [x] **로드맵 외 작업(완료, 2026-09-01)**: AI 에이전트 챗봇(RAG + Function Calling) — 기존 단발성 추천(`/recommend`)을 강의계획서 기반 근거 응답이 가능한 대화형 상담 에이전트로 대체. 새 기능이므로 위와 같은 원칙으로 **로드맵 외 작업**으로 분류. Stage 0~3 + 실사용 버그 2건 완료, 회고 → [portfolio/03](portfolio/03-ai-챗봇-rag-function-calling.md).
   - 설계 완료(2026-08-20, 이슈 #51 종결): [ADR-010](ADR/ADR-010-AI-에이전트-챗봇-설계.md) — Vector DB는 **Qdrant**(2026-08-27 §4 재검토로 Chroma→Qdrant, K8s+AWS/GCP 배포 확정 반영, 이슈 #91), 언어/서비스 배치(Python `ai-server` 확장, 상태는 Node가 소유), 임베딩 모델(`gemini-embedding-001`), PDF 파싱 라이브러리(`pdfplumber`, 실제 파서는 A3로 유예 — 아래 2026-08-29 항목)까지 전부 결정 완료.
   - 구현계획: [doc/AI-에이전트-구현계획.md](AI-에이전트-구현계획.md) — Stage 0(Tool 라우팅 검증) → Stage 1(RAG 결합, PDF 확보 후) → Stage 2(스트리밍+UI) → Stage 3(가드레일+최종 측정). 설계 재검토로 write Tool은 배제됨(ADR-010 §9).
   - 진행: Stage 0-1~0-5 완료·머지(인프라 분리 #66, 라우팅 뼈대 #68, `ai-server` 실제 엔드포인트 #70). Stage 0-6(Tool 라우팅 정확도 baseline, 이슈 #74) — 측정 하네스·계획서·질문 세트 70개 완료, **Gemini baseline 실측 완료**([결과](experiment/03-결과.md)): Tool 선택 정확도 93.1%, 정보 조회는 견고(할루시네이션 0건), 범위 밖 요청에 42% 과잉 호출이 Stage 3-1 Before. 모델 비교 7종 완료 → `gemini-3.1-flash-lite` 선정([ADR-012](ADR/ADR-012-챗봇-LLM-모델-선정.md), #78/#80).
@@ -41,7 +41,7 @@
   - **Stage 1-2(강의계획서 → Qdrant 적재) 완료(2026-08-30, 이슈 #100)**: PDF 19개 전수 정독 → `syllabi.yaml`(18청크, A3 single source of truth). `backend/ai-server/rag/` 파이프라인(`validate_syllabi`/`ingest --dry-run`/`inspect_qdrant`), `gemini-embedding-001` 비대칭 임베딩(3072d), `docker-compose`에 `qdrant` 추가. 스팟체크 rank-1 정답 5/5. ADR-010 §13에 실행 결과 서브섹션(17→18청크 정정, weekly_plan 8~15주). 설계: Notion "AI 챗봇 RAG 결합 (Stage 1)".
   - **Stage 1-3(RAG Tool 결합) 완료(2026-08-31, 이슈 #102)**: `chat/syllabus_tools.py` — `search_syllabus`(top-3, threshold 없음)·`get_syllabus`(course_code 필터, 다중청크 되물음, 미등록 None). TOOLS 2→4, SYSTEM_PROMPT +2문장(A안). 스모크 9케이스 라우팅 100%.
   - **Stage 1-4(RAG hit rate + naive Before/After) 완료(2026-08-31, 이슈 #104)**: `eval/run_rag_eval.py` 3모드. retrieval hit@3 **100%**, agent 전체 pass **100%**(162 rows, 미등록 할루시네이션 0·범위밖 오호출 0·1-3 회귀 0), naive(Before)도 의미검색 100%. **18청크 규모에선 RAG 정확도 우위 없음** — 실질 이득은 토큰 2.2×↓ + 확장성 + §7 아키텍처 분리. threshold 점수 겹쳐 보류. → [실험 04](experiment/04-결과.md).
-  - Stage 3-2/3-3/3-4 전부 완료(2026-08-31~09-01). AI 에이전트 트랙에서 남은 것은 ADR-010 Stage 0~3 종합 "결과" 섹션뿐.
+  - **AI 에이전트 챗봇 트랙 완료 (2026-09-01, 이슈 #119)**: Stage 0~3 + 실사용 버그 2건(#93/#117) 전부 마무리. 개발 전체 회고(문제→해결 상세→Before/After→방법론→한계) → [portfolio/03-ai-챗봇-rag-function-calling.md](portfolio/03-ai-챗봇-rag-function-calling.md), ADR-010 §18 "결과" 섹션 추가. **핵심 수치**: Tool 라우팅 93.1→100%, 범위밖 과잉호출 42→0%, RAG hit@3 100%·미등록 할루시네이션 0%, latency invoke p50 4.9→1.9초, 비용 $3.26→$1.00/1000turn, 옛 `/recommend` 완전 제거.
 - [x] Phase 2. 동시성 개선 (진행 중) — 기존 `courseController.js`의 정원 초과 방지 로직 부재 문제(로드맵 P1)를 다룬다. 위 실시간 수강신청 신규 기능과는 별개 트랙.
   - [x] Group A(무방비)/B(비관적 락) API 구현 (#9, 2026-08-10)
   - [x] k6+Prometheus+Grafana 부하테스트 인프라 + 계정 시딩 스크립트 (#13, 2026-08-11)

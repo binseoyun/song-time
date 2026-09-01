@@ -77,8 +77,9 @@
 - [x] 3-3. 최종 측정 (이슈 #113). 벤치마크 재작성(#111·PR #112) 후 gemini-3.1-flash-lite 74문항×5회. **가드레일(교정 전)**: Tool 선택 93.5%(baseline 93.1%) — 그러나 실패 성격이 뒤바뀜(baseline 과잉호출 41.7→0%, 대신 RAG 결합이 만든 "개념어 과목검색→`search_syllabus` 오라우팅"으로 과목검색 100→66.7%). **교정**: `search_courses`·`search_syllabus` description 2곳만(프롬프트 무변경) → **Tool 선택 100%**(sd 0.0, 72/72), 회귀 0, 할루시네이션 0/17. latency 에이전트 invoke p50 4.9→1.9초·실 SSE first-token p50 1.9초, 비용 $3.26→$1.00/1000turn. 상세: [`05-가드레일-전후-최종-측정.md`](experiment/05-가드레일-전후-최종-측정.md), Notion 실험 보고서 08. rate limit 값 `CHAT_RATE_LIMIT=20`/`WINDOW=60`은 E2E 측정(45건)에서 문제없어 유지.
 - [x] 3-4. `/recommend` 제거 (이슈 #115). ADR-010 §17 "완전 대체" 결정 실행. 프론트 `AIRecommendation.tsx` 삭제 + `App.tsx` `'ai'` 페이지(import·nav·라우트·`Page` 타입) 제거, `HomePage.tsx` "AI 수업 추천" 카드 → "AI 상담 챗봇"(`aichat`) 카드로 교체. Node `aiRoutes.js` `POST /recommend` 라우트 + `aiController.js` `getRecommendation`(+ 전용 import `Class`/`ClassSchedule`) 제거. `ai-server/main.py` `POST /recommend` 엔드포인트 + `RecommendationRequest` + `/recommend` 전용 전역 `genai` 설정·`model`·죽은 import(`json`/`os`/`Optional`/`genai`) 제거 — 챗봇 에이전트는 `langchain_google_genai`에 키를 직접 넘기고 RAG는 `rag/embed.py`가 자체 `genai.configure`. `K8s/01-configmap.yaml`의 죽은 "AI 추천 설정"·"직무별 추천"(`GENAI_MODEL`/`RECOMMEND_TOP_K`/`JOB_*_COURSES` — 볼륨 마운트만 되고 아무 코드도 안 읽음) 제거. 검증: 프론트 `vite build` 통과, backend 파일 `node -c`·모듈 로드 통과, `main.py` compile 통과. → [리팩토링 04](refactoring/04-recommend-제거.md)
 
-## 완료 조건
+## 완료 조건 — 전부 충족 (2026-09-01)
 
-- Stage 0~3 전부 완료 + 측정 결과 문서화
-- `doc/experiment/03-ai-에이전트-결과.md`(가칭)에 종합 정리
-- ADR-010에 "결과" 섹션 추가(실시간 수강신청 ADR들의 패턴과 동일)
+- [x] Stage 0~3 전부 완료 + 측정 결과 문서화 (실험 03/04/05/06, raw 전량)
+- [x] 종합 정리 → [`doc/portfolio/03-ai-챗봇-rag-function-calling.md`](portfolio/03-ai-챗봇-rag-function-calling.md) (개발 전체 회고: 문제 → 해결 상세 → 결과 → 방법론 → 한계). *(가칭 `03-ai-에이전트-결과.md` 대신 포트폴리오 문서로 작성 — CLAUDE.md 포트폴리오 소재 규칙)*
+- [x] ADR-010 §18 "결과 (Stage 0~3 종합)" 추가 (이슈 #119)
+- 실사용 버그 2건(#93 좌석 소스, #117 후속 질문 드리프트)도 발견·수정·재현 케이스 벤치마크 반영 완료.
