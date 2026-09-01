@@ -6,6 +6,10 @@ rag_questions.yaml 을 읽어 3가지 방식으로 측정한다:
     --mode agent     : 질문마다 에이전트 호출 → tool_calls·retrieved code·답변 채점 (기본)
     --mode naive     : 강의계획서 18개 전문 + 질문 단일 LLM 호출, Tool 없음 (Before 베이스라인)
 
+expect_kind=syllabus_followup 시나리오(이슈 #117)는 agent 모드에서만 채점된다 —
+turns[] 를 순서대로 돌리고(히스토리는 router.py 처럼 최종 답변 텍스트만 보존) 마지막 턴만
+채점. retrieval/naive 는 그냥 건너뛴다.
+
 raw(jsonl) + summary(json) 를 doc/experiment/raw/ 에 남긴다.
 
 실행 (ai-server 컨테이너, backend + qdrant 필요):
@@ -37,7 +41,7 @@ from eval.rag_scoring import score_agent, score_naive, score_retrieval, summariz
 
 DEFAULT_QUESTIONS = Path(__file__).resolve().parent / "rag_questions.yaml"
 DEFAULT_OUT_DIR = default_out_dir()
-VALID_KINDS = {"hit", "not_registered", "out_of_scope", "routing"}
+VALID_KINDS = {"hit", "not_registered", "out_of_scope", "routing", "syllabus_followup"}
 _CODE_RE = re.compile(r"'course_code':\s*'(\d{8})'|\"course_code\":\s*\"(\d{8})\"")
 
 
@@ -53,11 +57,17 @@ def load_items(path: Path) -> List[Dict[str, Any]]:
         if it["id"] in seen:
             sys.exit(f"[오류] {loc}: id 중복 {it['id']!r}")
         seen.add(it["id"])
-        if not it.get("question"):
-            sys.exit(f"[오류] {it['id']}: question 이 필요합니다.")
         kind = it.get("expect_kind")
         if kind not in VALID_KINDS:
             sys.exit(f"[오류] {it['id']}: expect_kind={kind!r} (허용: {sorted(VALID_KINDS)})")
+        if kind == "syllabus_followup":
+            turns = it.get("turns")
+            if not isinstance(turns, list) or len(turns) < 2 or not all(isinstance(t, str) for t in turns):
+                sys.exit(f"[오류] {it['id']}: syllabus_followup 는 turns(문자열 2개 이상 리스트)가 필요합니다.")
+            if not it.get("answer_must_include"):
+                sys.exit(f"[오류] {it['id']}: syllabus_followup 는 answer_must_include 가 필요합니다.")
+        elif not it.get("question"):
+            sys.exit(f"[오류] {it['id']}: question 이 필요합니다.")
         if kind == "hit" and not it.get("expect_course_code"):
             sys.exit(f"[오류] {it['id']}: hit 는 expect_course_code 가 필요합니다.")
         if kind == "routing" and not it.get("expect_tool"):
@@ -137,6 +147,25 @@ def run_retrieval(items, reps):
     return rows
 
 
+def _run_multiturn(agent, turns, recursion_limit, retries, retry_wait):
+    """syllabus_followup: 턴을 순서대로 돌리고 마지막 턴의 (calls, answer, new, latency)만 돌려준다.
+    히스토리는 router.py 와 동일하게 사용자 발화 + 최종 답변 텍스트만 쌓는다(Tool 관측값 미보존)."""
+    from langchain_core.messages import AIMessage, HumanMessage
+    from chat.message_utils import extract_text, extract_tool_calls
+
+    history: list = []
+    for turn_text in turns:
+        input_messages = history + [HumanMessage(content=turn_text)]
+        result, err, latency_ms = invoke_with_retry(
+            agent, input_messages, recursion_limit, retries, retry_wait)
+        if err or result is None:
+            return None, err or "unknown", [], "", latency_ms
+        answer = extract_text(result["messages"][-1].content)
+        new = result["messages"][len(input_messages):]
+        history = input_messages + [AIMessage(content=answer or "(빈 응답)")]
+    return new, None, extract_tool_calls(new), answer, latency_ms
+
+
 def run_agent(items, reps, recursion_limit, retries, retry_wait, sleep):
     from langchain_core.messages import HumanMessage
 
@@ -148,10 +177,27 @@ def run_agent(items, reps, recursion_limit, retries, retry_wait, sleep):
     for rep in range(1, reps + 1):
         print(f"\n[rep {rep}/{reps}]")
         for it in items:
+            base = {"rep": rep, "scenario_id": it["id"], "category": it["category"]}
+            if it.get("expect_kind") == "syllabus_followup":
+                new, err, calls, answer, latency_ms = _run_multiturn(
+                    agent, it["turns"], recursion_limit, retries, retry_wait)
+                base["latency_ms"] = latency_ms
+                if err:
+                    rows.append({**base, "error": err, "answer": None, "tool_calls": None,
+                                 "retrieved": None, "tokens": None,
+                                 "scores": score_agent(it, [], None, "")})
+                else:
+                    rows.append({**base, "error": None, "answer": answer, "tool_calls": calls,
+                                 "retrieved": _retrieved_from_calls(calls), "tokens": sum_tokens(new),
+                                 "scores": score_agent(it, calls, None, answer)})
+                sc = rows[-1]["scores"]
+                print(f"  [{rep}] {it['id']:<10} {it['expect_kind']:<15} pass={sc.get('pass')}")
+                time.sleep(sleep)
+                continue
+
             result, err, latency_ms = invoke_with_retry(
                 agent, [HumanMessage(content=it["question"])], recursion_limit, retries, retry_wait)
-            base = {"rep": rep, "scenario_id": it["id"], "category": it["category"],
-                    "latency_ms": latency_ms}
+            base["latency_ms"] = latency_ms
             if err or result is None:
                 rows.append({**base, "error": err or "unknown", "answer": None,
                              "tool_calls": None, "retrieved": None, "tokens": None,
@@ -223,7 +269,8 @@ def print_summary(summary: Dict[str, Any], mode: str) -> None:
         print(f"\n  [{kind}]  n={b['n']}  pass={_pct(b['pass_rate'])}")
         for key in ("hit_at_1", "hit_at_3", "hit_at_5", "search_syllabus_called_rate",
                     "answer_names_course_rate", "no_hallucination_rate",
-                    "says_not_registered_rate", "syllabus_tool_called_rate", "tool_ok_rate"):
+                    "says_not_registered_rate", "syllabus_tool_called_rate", "tool_ok_rate",
+                    "lastturn_tool_ok_rate", "answer_correct_rate"):
             if key in b:
                 print(f"      {key:<28} {_pct(b[key])}")
     st = summary["stability"]

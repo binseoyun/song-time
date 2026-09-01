@@ -443,3 +443,44 @@
   expect_kind: routing
   expect_tool: search_courses
   note: "interest_count(전체 조회) → search_courses. 강의계획서 아님"
+
+
+# ===== 후속: 강의계획서를 여러 턴 조회한 뒤 이어지는 상세 질문 (이슈 #117) =====
+# Tool 관측값은 다음 턴 히스토리에 안 남는다(cache.append_turn / _to_history_messages 는
+# {role, 최종 답변 텍스트}만). 그래서 앞 턴에서 get_syllabus 로 본 값(교수 이메일·선수과목
+# 등)도 후속 턴 시점엔 LLM 컨텍스트에 없다 → get_syllabus 를 재호출해야 정확히 답한다.
+# 실사용 재현: 대화가 "조회"에서 "설명/부연" 흐름으로 가면 flash-lite 가 재호출을 건너뛰고
+# 그럴듯한 값을 지어낸다(교수 이메일을 "jhshim@university.ac.kr" 로). turns 는 문자열 리스트,
+# 마지막 턴만 채점한다. answer_must_include/not_include 는 마지막 답변 기준.
+
+- id: rag-54
+  category: 후속
+  expect_kind: syllabus_followup
+  expect_tool_lastturn: get_syllabus
+  turns:
+    - "이번 학기에 데이터 관련 수업 있어?"
+    - "심준호 교수님의 데이터베이스설계와 질문은 각 분반별로 수업 시간이 어떻게 돼?"
+    - "그럼 저거 1,2,3 분반 평가 기준이 어떻게 돼?"
+    - "그러면 책은 뭐써"
+    - "심준호 교수님 이메일 알아?"
+  answer_must_include: ["jshim@sookmyung.ac.kr"]
+  answer_must_not_include: ["university.ac.kr", "jhshim"]
+  note: >
+    #117 실사용 재현. 사용자 발화 그대로(2턴 "질문은"은 오타 — 이 오타 프레이징이
+    2턴 검색을 지저분하게 만들어 5턴 드리프트를 유발한다. "데이터베이스설계와질의"로
+    고쳐 쓰면 재현이 안 됨). 실제값 jshim@sookmyung.ac.kr (syllabi.yaml).
+    교정 전: 5턴째 get_syllabus 재호출 없이 "jhshim@university.ac.kr" 지어냄(5/5).
+
+- id: rag-55
+  category: 후속
+  expect_kind: syllabus_followup
+  expect_tool_lastturn: get_syllabus
+  turns:
+    - "알고리즘 수업 이번 학기에 열려?"
+    - "안태훈 교수님 알고리즘 분반이 몇 개야?"
+    - "그 수업 주차별로 뭐 배우는지 알려줘"
+    - "그럼 주교재가 뭐야?"
+    - "안태훈 교수님 이메일 주소 뭐야?"
+  answer_must_include: ["taehoon@sookmyung.ac.kr"]
+  answer_must_not_include: ["university.ac.kr"]
+  note: "다른 과목·교수로 일반화 확인. 실제값 taehoon@sookmyung.ac.kr. 알고리즘 21000549 (안태훈, 1·2분반 병합)"

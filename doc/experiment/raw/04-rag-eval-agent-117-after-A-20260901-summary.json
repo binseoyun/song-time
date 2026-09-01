@@ -1,0 +1,36 @@
+{
+  "meta": {
+    "mode": "agent",
+    "model": "gemini-3.1-flash-lite",
+    "started_at": "2026-09-01T06:06:49",
+    "finished_at": "2026-09-01T06:08:37",
+    "questions_file": "eval/_repro117.yaml"
+  },
+  "n_reps": 5,
+  "n_rows": 10,
+  "n_errors": 0,
+  "by_kind": {
+    "syllabus_followup": {
+      "n": 10,
+      "pass_rate": 1.0,
+      "lastturn_tool_ok_rate": 1.0,
+      "answer_correct_rate": 1.0,
+      "no_hallucination_rate": 1.0
+    }
+  },
+  "overall_pass_rate": 1.0,
+  "stability": {
+    "scenarios_scored": 2,
+    "fully_passing_all_reps": 2,
+    "flaky_scenarios": []
+  },
+  "latency_ms": {
+    "p50": 1643.3,
+    "p95": 1847.9,
+    "mean": 1656.5
+  },
+  "tokens": {
+    "total": 52310,
+    "mean_per_row": 5231
+  }
+}

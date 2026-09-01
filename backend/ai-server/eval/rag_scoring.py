@@ -5,10 +5,14 @@
 분리한 이유는 채점 축이 완전히 달라서다 — retrieval hit@k / 할루시네이션 / 오선택.
 
 expect_kind:
-  hit            (의미검색) : search_syllabus top-k 에 정답 course_code 가 드는가
-  not_registered (미등록)   : 없는 강의계획서를 지어내지 않는가
-  out_of_scope   (범위밖)   : 정확한 값 질문에 강의계획서 Tool 을 안 부르는가
-  routing        (라우팅)   : 1-3 회귀 — expect_tool 과 일치하는가 (questions.yaml 과 동일 의미)
+  hit               (의미검색) : search_syllabus top-k 에 정답 course_code 가 드는가
+  not_registered    (미등록)   : 없는 강의계획서를 지어내지 않는가
+  out_of_scope      (범위밖)   : 정확한 값 질문에 강의계획서 Tool 을 안 부르는가
+  routing           (라우팅)   : 1-3 회귀 — expect_tool 과 일치하는가 (questions.yaml 과 동일 의미)
+  syllabus_followup (후속)     : 강의계획서를 여러 턴 조회한 뒤 이어지는 상세 후속 질문(교수
+                                 이메일 등)에서, Tool 관측값이 히스토리에 안 남는데도 get_syllabus
+                                 를 재호출해 정확히 답하는가 — 재호출 없이 지어내면 실패 (#117).
+                                 turns[] (문자열 리스트) 필수, 마지막 턴만 채점한다.
 """
 from __future__ import annotations
 
@@ -37,6 +41,14 @@ def _no_forbidden(answer: str, forbidden: Optional[Iterable[str]]) -> Optional[b
         return None
     low = (answer or "")
     return not any(str(f) in low for f in forbidden)
+
+
+def _has_all(answer: str, required: Optional[Iterable[str]]) -> Optional[bool]:
+    """answer_must_include 를 전부 포함하면 True. 라벨이 없으면 None. 공백 접어 비교."""
+    if not required:
+        return None
+    ans = _nospace(answer)
+    return all(_nospace(r) in ans for r in required)
 
 
 def _nospace(s: str) -> str:
@@ -95,6 +107,20 @@ def score_agent(item: Dict[str, Any], tool_calls: List[Dict[str, Any]],
             s["tool_ok"] = et in called_set
         s["no_syllabus_tool"] = not (called_set & set(SYLLABUS_TOOLS))
         s["pass"] = bool(s["tool_ok"] and s["no_syllabus_tool"])
+
+    elif kind == "syllabus_followup":
+        # tool_calls·answer 는 마지막 턴 것만 넘어온다(run_agent 가 멀티턴을 돌리고 마지막만 채점).
+        # search_courses 로 코드를 먼저 찾는 선행 호출은 penalize 하지 않는다 — 핵심은
+        # "이메일 같은 강의계획서 값을 get_syllabus 재호출로 확인했는가".
+        want = item.get("expect_tool_lastturn", "get_syllabus")
+        s["lastturn_tool_ok"] = want in called_set
+        s["answer_correct"] = _has_all(answer, item.get("answer_must_include"))
+        s["answer_no_hallucination"] = _no_forbidden(answer, item.get("answer_must_not_include"))
+        s["pass"] = bool(
+            s["lastturn_tool_ok"]
+            and s["answer_correct"] is not False
+            and s["answer_no_hallucination"] is not False
+        )
 
     else:
         raise ValueError(f"알 수 없는 expect_kind: {kind!r}")
@@ -186,6 +212,13 @@ def summarize_rag(rows: List[Dict[str, Any]], n_reps: int, meta: Dict[str, Any])
                 [r["scores"].get("syllabus_tool_called") for r in krows])
         if kind in ("routing",):
             block["tool_ok_rate"] = _rate([r["scores"].get("tool_ok") for r in krows])
+        if kind in ("syllabus_followup",):
+            block["lastturn_tool_ok_rate"] = _rate(
+                [r["scores"].get("lastturn_tool_ok") for r in krows])
+            block["answer_correct_rate"] = _rate(
+                [r["scores"].get("answer_correct") for r in krows])
+            block["no_hallucination_rate"] = _rate(
+                [r["scores"].get("answer_no_hallucination") for r in krows])
         out["by_kind"][kind] = block
 
     # 안정성: 시나리오별 전 rep pass
