@@ -25,10 +25,10 @@ export function HomePage({ onNavigate, user }: HomePageProps) {
     },
     {
       icon: Sparkles,
-      title: 'AI 수업 추천',
-      description: '직무별로 적합한 과목을 AI가 추천해드립니다',
+      title: 'AI 상담 챗봇',
+      description: '강의계획서 기반으로 과목·수강신청을 대화형으로 상담해드립니다',
       color: 'bg-purple-500',
-      page: 'ai' as Page,
+      page: 'aichat' as Page,
     },
     {
       icon: User,
@@ -57,7 +57,7 @@ export function HomePage({ onNavigate, user }: HomePageProps) {
         <h4 className="text-yellow-800 mb-2">💡 팁</h4>
         <ul className="text-yellow-700 space-y-1">
           <li>• 시간표 생성 전에 수업 목록에서 관심 과목을 먼저 등록해보세요</li>
-          <li>• AI 수업 추천으로 자신의 진로에 맞는 과목을 찾아보세요</li>
+          <li>• AI 상담 챗봇에게 과목이나 수강신청에 대해 물어보세요</li>
           <li>• 여러 시간표를 저장해두고 비교해보세요</li>
         </ul>
       </div>
