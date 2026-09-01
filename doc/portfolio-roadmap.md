@@ -63,6 +63,8 @@
 
 ## 0. 현재 상태 진단 (As-Is)
 
+> **아키텍처 스타일**: 이 시스템은 MSA가 아니라 **모듈러 모놀리스(Node backend) + 근거 있게 추출한 서비스 1개(ai-server)**다. 상세 검토·근거·포트폴리오 서사는 [아키텍처 스타일 검토](architecture/00-아키텍처-스타일-검토.md) (#121). 4장 "MSA 전환 같은 대수술은 하지 말 것"의 근거.
+
 ### 아키텍처
 ```
 [React/Vite Frontend] ──> [Express Backend :8000] ──> [MySQL (StatefulSet+PVC)]

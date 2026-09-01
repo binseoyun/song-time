@@ -27,7 +27,9 @@ backend/ai-server는 요청이 올 때마다 `process.env`를 그때그때 읽�
 
 반면 frontend(Vite)는 `npm run build` 시점에 `import.meta.env.VITE_*` 텍스트를 실제 값으로 바꿔치기해서 **정적 파일로 굳혀버린다**. 빌드가 끝나면 그 안의 주소는 컨테이너에 어떤 환경변수를 넣어도 바뀌지 않는다 — 환경이 바뀌면 재빌드해야 한다. 이게 바로 지금 frontend만 `binseoyun/frontend:v1`(docker-compose용), `v2`(K8s용)로 이미지가 갈라진 이유다.
 
-### 3. 왜 MSA 전체가 아니라 frontend↔backend 경계 한 지점만 문제인가
+### 3. 왜 전체가 아니라 frontend↔backend 경계 한 지점만 문제인가
+
+> **용어 정정 (2026-09-01, #121)**: 이 절 제목과 본문에서 "MSA"라고 쓴 건 "여러 컨테이너로 나뉜 전체 시스템"을 가리키는 느슨한 표현이었다. 실제로 이 시스템은 MSA가 아니라 **모듈러 모놀리스(Node backend) + ai-server 추출**이다 — `doc/architecture/00-아키텍처-스타일-검토.md` 참고. 아래 논지(클러스터 내부 통신 vs 브라우저가 경계를 넘는 지점)는 그대로 유효하다.
 
 backend→db, backend→ai-server처럼 **호출자와 호출 대상이 모두 클러스터 안**에 있는 통신은 클러스터 내부 DNS(`db-service`, `ai-server-service` 등)가 정상적으로 해석되므로 전혀 문제가 없다.
 
