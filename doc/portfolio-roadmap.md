@@ -47,13 +47,34 @@
   - [x] k6+Prometheus+Grafana 부하테스트 인프라 + 계정 시딩 스크립트 (#13, 2026-08-11)
   - [x] 실험 01 정식 실행: 7단계 동시성 스윕(50~12,000명) × 그룹 × 5회 반복, 총 70회차 (#15, 2026-08-12) — [결과](experiment/01-결과.md). H1(A는 정합성 깨짐, 저동시성에선 고처리량이나 3,000명↑부터 A도 붕괴) 부분 확인, H2(B는 정합성 완벽하나 특정 수준부터 처리량 급락) 확인. Group A가 "정원 검사 로직이 있는데도" TOCTOU 레이스로 무력화되는 메커니즘 규명.
   - [x] Group C(Redis 원자 연산) 구현 및 동일 스윕 재실험 — Group B와 비교 (#23/#29, 2026-08-18) — [결과](experiment/01-결과-groupC.md). 정합성 스윕 35/35 회차 전부 오버셀 0건·DLQ 0건(H3 정합성 확인, success sd 항상 0.0). 처리량은 12,000명에서 handled_rate 12.1%(A 8.1%/B 9.1%보다 근소 우위)로, "3,000명↑ 붕괴는 락 경합이 아니라 인프라 한계"라는 A/B 관찰이 Group C에서도 재확인됨. 어뷰징(매크로 연타/시간표 겹침)은 로컬 커넥션 한계로 노이즈가 컸으나 판정 기준(정원 초과 성공·겹침 유저) 위반은 0건
-  - [ ] 3,000명↑ 구간 붕괴 원인 분리(락 경합 vs 인프라 한계) 후속 실험 — Group C 실험으로 "락 경합이 아님"까지는 간접 확인됐으나, 정확한 인프라 병목 지점(커넥션 한도 등) 특정은 아직 안 함
-  - [ ] 최종 개선안 선택 + ADR 작성
+  - [x] 3,000명↑ 구간 붕괴 원인 분리 — **로컬 단일 호스트 backend 프로세스 CPU 천장으로 이미 특정([ADR-007](ADR/ADR-007-대기열-부하-backend-인스턴스-수평-확장.md), [트러블슈팅 08](troubleshooting/08-validate3k-잔여노이즈-원인-docker-desktop-cpu-캡.md)). 로컬에서 커넥션 한도 스윕은 "노트북 측정"이라 무의미 — 실배포 규모 처리량 상한 측정은 인프라 트랙 순서 ④(AWS 부하테스트)로 이관.**
+  - [x] 최종 개선안 선택 + ADR 작성 — **Group C 확정, [ADR-014](ADR/ADR-014-실시간-수강신청-동시성-제어-방식-확정.md) (2026-09-01, #123). ADR-006 §2.1/§2.2 결정을 독립 ADR로 분리 + 실험 01 수치(오버셀 A +925 / B·C 0·105회차 sd 0.0, 카오스 3종) 편입. Phase 2 종결.**
 - [x] Phase 3. K8s 운영화 (일부, 당겨서 진행) — Ingress 도입 + frontend same-origin 전환: K8s 배포 후 브라우저에서 로그인 검증 자체가 불가능했던 문제(클러스터 내부 DNS를 브라우저가 해석 못함) 해결. LoadBalancer×2 → Ingress 1개로 진입점 통합, docker-compose에도 nginx 리버스 프록시로 동일 구조 적용 ([ADR-003](ADR/ADR-003-Ingress-도입과-Frontend-API-주소-구성-방식-전환.md), 2026-08-04)
-- [ ] Phase 3. 나머지 (Probe 재설계, resource requests/limits + CronHPA 사전 확장·HPA 병행([ADR-011](ADR/ADR-011-CronHPA-HPA-병행-확장-구조.md)), DB 마이그레이션 도구 도입) — resource/HPA는 이미 실험 01(Group A/B/C) 실측 데이터가 있어 실시간 수강신청 Stage 3의 Sentinel/풀 사이징보다 우선순위 높음(2026-08-19 결정)
-  - [ ] **엣지 coarse rate limit** (AWS/K8s 실배포 시) — Ingress에 IP/커넥션 단위 요청 수 제한(nginx-ingress `limit-rps`/`limit-connections` 어노테이션 또는 AWS WAF rate-based rule). DoS·봇 방어용이며, 애플리케이션 비용 방어(챗봇 LLM 토큰 = ai-server 계층, ADR-010 §15 재검토, #108)와는 별도 계층(defense in depth). 전용 게이트웨이 제품(Kong/Apigee)은 이 규모에 불필요 — 서비스 소수·프론트 클라이언트 1개라, "규모에 안 맞는 복잡도는 안 들인다" 원칙(ADR-009 등) 적용. 설정 한 줄 수준이라 별도 프로젝트로 잡지 않고 실배포 체크리스트 항목으로 둔다.
-- [ ] Phase 4. CI/CD
-- [ ] Phase 5. 관측성
+### 인프라 트랙 실행 순서 (2026-09-01 확정, 이슈 #123 / #121 아키텍처 검토 반영)
+
+챗봇 트랙(로드맵 외 작업) 완료 후 마지막 트랙. **모듈러 모놀리스를 먼저 K8s·클라우드·CI/CD로 운영화한 뒤, 그 플랫폼 위에서 수강신청 도메인을 마이크로서비스로 점진 추출**한다(strangler fig). 서비스 분리와 K8s 운영을 동시에 디버깅하지 않기 위한 순서 — 근거: [아키텍처 스타일 검토](architecture/00-아키텍처-스타일-검토.md).
+
+- [x] **①** Phase 2 결론 ADR — [ADR-014](ADR/ADR-014-실시간-수강신청-동시성-제어-방식-확정.md) (완료)
+- [ ] **②** C-lite: `backend/src/`를 `modules/{auth,courses,registration,timetables}/`로 격리, `registrations` 별도 스키마, 모듈 간 직접 import 정리 — ③의 마이그레이션 작업이 모듈 단위로 조직되도록 (~1일)
+- [ ] **③** Phase 3 (K8s 운영화, 모놀리스 상태) — ★ K8s 운영 경험 (~1.5주)
+  - Probe 재설계: `readinessProbe` 신설(`/health`, DB 체크). `livenessProbe`는 `/` 유지 (이미 그렇게 돼 있음 — `K8s/30-backend.yaml`). "liveness에 DB 넣으면 DB 장애 시 재시작 폭풍" 서사
+  - resource requests/limits — 실험 01/02 실측(backend 프로세스 CPU 천장 등, ADR-007) 기반 산정
+  - CronHPA(9시 사전 확장) + HPA 병행 — 구조는 [ADR-011](ADR/ADR-011-CronHPA-HPA-병행-확장-구조.md)에서 확정(스케줄은 `minReplicas`만 조정). 임계값·`maxReplicas`는 resource 실측 후
+  - DB 마이그레이션 도구(umzug 등) — `app.js`의 `sequelize.sync()` 제거 (P6). backend만 대상 (ai-server는 이미 Alembic)
+  - StatefulSet 백업 — CronJob `mysqldump`
+  - kind에서 부하 걸어 HPA 반응·파드 kill 무중단(rolling update + readiness gate) 검증
+- [ ] **④** AWS 실배포 — ★ 클라우드 K8s 운영 (~1주)
+  - EKS vs 자체관리 K8s on EC2 — 별도 ADR
+  - 관리형 LB(ALB/NLB), EBS PV, Route53, ACM(HTTPS)
+  - **엣지 coarse rate limit** — nginx-ingress `limit-rps`/`limit-connections` 또는 AWS WAF rate-based rule. DoS·봇 방어용, 애플리케이션 비용 방어(챗봇 LLM 토큰 = ai-server 계층, ADR-010 §15)와는 별도 계층(defense in depth). 전용 게이트웨이(Kong/Apigee)는 이 규모에 불필요
+  - **실험 01/02를 AWS에서 재실행** — 로컬 CPU 2코어 한계가 풀린 상태의 진짜 처리량 상한. ①(ADR-014)에서 이관한 검증. 서사 A의 마무리
+- [ ] **⑤** Phase 4. CI/CD — ★ 파이프라인 (~1주). GitHub Actions: lint → test → docker build → 커밋 SHA 태깅 → push → deploy. "PR merge = 배포 트리거"([git-workflow.md](git-workflow.md)에서 선행 작업 완료)
+- [ ] **⑥** Phase 5. 관측성 (~3~5일) — 구조화 로깅, Prometheus/Grafana(부하 대시보드는 기존 재사용), 알림
+- [ ] **⑦** (재결정 포인트) registration-service 물리 추출 — ★ MSA 전환 (~2~3주)
+  - ①~⑥만으로도 면접 답변 성립("MSA 설계 + 모듈러 모놀리스 + ai-server 실물"). ⑦은 "다수 서비스를 실제 배포·운영·부하검증" 경험이 하드 요구인 자리를 지원할 때
+  - C-full(②의 확장) + registrationRoutes/queueRoutes/worker를 새 서비스로. 과목 데이터는 backend `/api/courses/:code` 호출, 인증은 게이트웨이가 `x-user-id` 전달(ai-server 패턴). 자기 Deployment/HPA/Probe/CI(⑤ 복제). nginx가 `/api/registrations`·`/api/queue` 라우팅
+  - **실험 01을 2-서비스 토폴로지로 재재실행** — 서비스 경계를 넘어도 오버셀 0 유지되는지, Ghost Decrement가 진짜 네트워크 경계 넘을 때. "MSA 전환 전후 비교" 별도 ADR + 트러블슈팅
+  - (선택 ⑧) 폴리글랏 연습 — registration-service를 Go/Java로. ADR-006 §0 "폴리글랏 회피" 기각을 뒤집는 ADR에 "스킬 목적으로 감수" 명시
 
 > 작성일: 2026-07-15
 > 목적: PRD.md의 목표(구조 파악 → 리팩토링/아키텍처 보완 → 포트폴리오 정리)를 실행 가능한 단계로 구체화한다.
@@ -133,24 +154,28 @@ K8s: namespace / ConfigMap / Secret / backend 2 replicas / CronJob(관심과목 
    - **CD**: 1단계는 Actions에서 kustomize edit + apply, 2단계(선택)는 ArgoCD GitOps. 로컬 kind 클러스터 한계 때문에 어디까지 했고 실환경이라면 어떻게 할지를 문서로
 3. **측정**: 배포 소요 시간(수동 N분 → 자동 M분), 배포 실수 가능 지점 수 감소
 
-### (선택) 서사 D. "AI 서버 경계 재설계" — 시간이 남으면
+### 서사 D. "AI 서버 경계 재설계" — ✅ AI 상담 챗봇(로드맵 외 작업)으로 사실상 완료
 
-- 프론트가 전체 과목 데이터를 AI 서버에 실어 보내는 현재 구조의 문제(payload 비대, 데이터 위변조 가능, 프론트-DB 스키마 결합)를 정의하고, AI 서버가 backend API에서 직접 조회(또는 read-only DB 접근)하도록 변경.
-- Gemini API 호출 캐싱/타임아웃/폴백 처리 — 외부 의존성 장애 격리 서사.
+- 옛 `/recommend`가 "프론트→Node→ai-server로 전체 과목 데이터를 실어 보내는" 구조였고, 이게 payload 비대·프론트-DB 스키마 결합의 원인이었다. → 챗봇으로 대체하며 **ai-server가 필요한 데이터만 Tool(`GET /api/courses`)로 조회**하도록 바뀌었고, `/recommend`는 Stage 3-4에서 완전 제거([ADR-010](ADR/ADR-010-AI-에이전트-챗봇-설계.md), [portfolio/03](portfolio/03-ai-챗봇-rag-function-calling.md)).
+- Gemini API 호출 타임아웃/폴백/장애 격리 — Stage 3-2(`chat/errors.py` 3분류 degrade), rate limit은 ai-server 계층(§15). "완전 MSA 분리"로 ai-server가 자기 데이터(db-chat·redis-chat·qdrant) 소유.
+- **남은 조각**: ai-server의 read-only DB 직접 접근은 안 함(Tool = HTTP API로 유지, 경계가 더 깨끗). 캐싱은 `redis-chat` 작업 메모리로 부분 적용.
 
 ---
 
 ## 2. 실행 순서 (의존관계 기준)
 
 ```
-Phase 1. 안전망         : 테스트 환경 구축 + 핵심 API 통합 테스트 + .env/시크릿 위생   (서사 C 앞부분)
-Phase 2. 동시성 개선     : 부하테스트(Before) → 개선 실험 → 측정(After)              (서사 A 전체)
-Phase 3. K8s 운영화     : Ingress → Probe → resources/HPA → 마이그레이션            (서사 B 전체)
-Phase 4. CI/CD          : GitHub Actions → (선택) GitOps                            (서사 C 뒷부분)
-Phase 5. 관측성         : 구조화 로깅 → Prometheus/Grafana → 부하테스트 대시보드      (서사 A,B의 측정 강화)
+Phase 1. 안전망         : 테스트 환경 + 핵심 API 통합 테스트 + .env/시크릿 위생        (서사 C 앞부분)  ✅
+Phase 2. 동시성 개선     : 부하테스트(Before) → A/B/C 실험 → Group C 확정(ADR-014)     (서사 A)  ✅
+로드맵 외: 실시간 수강신청 (대기열·Redis 원자연산·비동기 반영), AI 상담 챗봇 (RAG+FC)  ✅
+
+── 인프라 트랙 (strangler fig 순서, 위 "인프라 트랙 실행 순서" 참조) ──
+② modules/ 격리 → ③ Phase 3 K8s(모놀리스) → ④ AWS 실배포 + 부하 재측정
+  → ⑤ Phase 4 CI/CD → ⑥ Phase 5 관측성 → ⑦ registration-service 물리 추출(MSA)
 ```
 
-Phase 1을 먼저 하는 이유: 이후 모든 리팩토링의 "깨지지 않았음"을 증명할 수단이 필요하고, 시크릿이 git에 있는 상태로 CI를 붙이면 유출 위험이 커지기 때문.
+- Phase 1을 먼저 한 이유: 이후 모든 리팩토링의 "깨지지 않았음"을 증명할 수단이 필요하고, 시크릿이 git에 있는 상태로 CI를 붙이면 유출 위험이 커지기 때문.
+- 인프라 트랙에서 K8s·CI/CD·관측성(③~⑥)을 **모놀리스 상태로 먼저** 하는 이유: K8s 운영을 단순한 대상(Deployment 2개)에서 익힌 뒤 서비스를 늘려야, "서비스 분리 + K8s 처음"을 동시에 디버깅하지 않는다. ⑦에서 매니페스트·파이프라인을 복제(copy-adapt)하므로 재작업 비용도 작다.
 
 ---
 
